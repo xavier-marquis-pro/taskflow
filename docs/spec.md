@@ -30,3 +30,19 @@
 - Quel comportement adopter si un ID référencé est introuvable, notamment après import ?
 - L’interdiction d’entrer en « En cours » doit-elle aussi s’appliquer aux imports et à toutes les autres voies de changement de statut ?
 - Quel format exact doit avoir le message de blocage hors cycle, et où doit-il être affiché ?
+
+## Décisions (relecture Xavier)
+
+- Gestion des dépendances : dans le formulaire d'édition du ticket (liste des bloquants).
+- Un même bloquant n'est jamais ajouté deux fois. Un ticket déjà terminé peut être bloquant.
+- Un ID introuvable dans `bloquePar` est ignoré (non bloquant) et retiré à la prochaine sauvegarde.
+- Le blocage « En cours » s'applique uniquement au déplacement (`deplacerTickets`).
+- Message de blocage : `Bloqué par #3, #5 (non terminés).`, affiché dans le toast d'erreur.
+
+## Fonctions attendues (contrat entre Testeur-QA et Dev-JS)
+
+- `ajouterBloquant(liste, idTicket, idBloquant)` → `{ ok, erreur }`, refuse les cycles et les doublons.
+- `deplacerTickets(liste, idTicket, versStatut)` → refuse `encours` si un bloquant n'est pas terminé.
+- `listerBloquants(liste, ticket)` → tableau `[{ id, titre }]` utilisé par le badge 🔒.
+- `supprimerTicketEtReferences(liste, idTicket)` → nouvelle liste sans le ticket ni ses références.
+- `migrerV4versV5(data)` + `VERSION_ACTUELLE = 5`.
