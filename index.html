@@ -465,6 +465,25 @@
     </div>
   </div>
 
+  <div id="dependances-modal-backdrop" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div id="dependances-modal-box" class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 transform scale-95 transition-transform duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white">Modifier les bloquants</h3>
+          <p id="dependances-ticket-title" class="text-xs text-slate-400 mt-1"></p>
+        </div>
+        <button type="button" id="btn-close-dependances-x" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800" aria-label="Fermer">×</button>
+      </div>
+      <p class="text-xs text-slate-400">Sélectionnez les tickets qui doivent être terminés avant celui-ci. Les tickets terminés peuvent aussi être sélectionnés.</p>
+      <div id="dependances-error" class="hidden text-xs text-rose-400 bg-rose-500/10 p-2 rounded border border-rose-500/20"></div>
+      <div id="dependances-ticket-list" class="max-h-64 overflow-y-auto space-y-1"></div>
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+        <button type="button" id="btn-cancel-dependances" class="px-3 py-1.5 hover:bg-slate-800 text-slate-300 text-xs font-medium rounded-xl">Annuler</button>
+        <button type="button" id="btn-save-dependances" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <div id="delete-modal-backdrop" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
     <div id="delete-modal-box" class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4 text-center transform scale-95 transition-transform duration-200">
       <div class="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center justify-center mx-auto">

@@ -10,10 +10,10 @@
     ];
 
     // ==========================================
-    // STORAGE VERSIONNÉ (V4) avec Journal
+    // STORAGE VERSIONNÉ (V5) avec Journal
     // ==========================================
     const CLE = "taskflow";
-    const VERSION_ACTUELLE = 4;
+    const VERSION_ACTUELLE = 5;
     const CURRENT_USER_ID = 1;
 
     const USERS_DEMO = [
@@ -29,18 +29,18 @@
     ];
 
     const TICKETS_DEMO = [
-      { id: 1, titre: "Connexion SSO via OAuth2", type: "story", priorite: 1, points: 5, statut: "encours", creeLe: "2026-11-01", projet: { ...defaultProject }, assigne: 1 },
-      { id: 2, titre: "Correction crash au paiement Stripe", type: "bug", priorite: 1, points: 3, statut: "afaire", creeLe: "2026-11-02", projet: { ...defaultProject }, assigne: 2 },
-      { id: 3, titre: "Export PDF des factures mensuelles", type: "story", priorite: 2, points: 8, statut: "backlog", creeLe: "2026-10-28", projet: { ...defaultProject }, assigne: null },
-      { id: 4, titre: "Mise à jour du design du Dashboard", type: "tache", priorite: 2, points: 5, statut: "afaire", creeLe: "2026-11-03", projet: { ...defaultProject }, assigne: 3 },
-      { id: 5, titre: "Refonte de la gestion du profil utilisateur", type: "story", priorite: 2, points: null, statut: "backlog", creeLe: "2026-10-30", projet: { ...defaultProject }, assigne: null },
-      { id: 6, titre: "Bug d'affichage mode sombre sous Safari", type: "bug", priorite: 3, points: 1, statut: "backlog", creeLe: "2026-10-29", projet: { ...defaultProject }, assigne: 4 },
-      { id: 7, titre: "Optimisation de la vitesse des requêtes SQL", type: "tache", priorite: 1, points: 8, statut: "encours", creeLe: "2026-10-25", projet: { ...defaultProject }, assigne: 5 },
-      { id: 8, titre: "Intégration du système de notifications push", type: "story", priorite: 3, points: 13, statut: "backlog", creeLe: "2026-11-02", projet: { ...defaultProject }, assigne: null },
-      { id: 9, titre: "Erreur 404 lors du téléchargement de pièces jointes", type: "bug", priorite: 2, points: 2, statut: "termine", creeLe: "2026-10-27", projet: { ...defaultProject }, assigne: 6 },
-      { id: 10, titre: "Migration des serveurs vers AWS Cloud", type: "tache", priorite: 3, points: null, statut: "backlog", creeLe: "2026-11-03", projet: { ...defaultProject }, assigne: 7 },
-      { id: 11, titre: "Ajout du choix de la langue (i18n Multi-langues)", type: "story", priorite: 3, points: 3, statut: "backlog", creeLe: "2026-10-31", projet: { ...defaultProject }, assigne: 8 },
-      { id: 12, titre: "Mise en place de la suite de tests E2E Cypress", type: "tache", priorite: 1, points: 5, statut: "afaire", creeLe: "2026-10-26", projet: { ...defaultProject }, assigne: 9 }
+      { id: 1, titre: "Connexion SSO via OAuth2", type: "story", priorite: 1, points: 5, statut: "encours", creeLe: "2026-11-01", projet: { ...defaultProject }, assigne: 1, bloquePar: [] },
+      { id: 2, titre: "Correction crash au paiement Stripe", type: "bug", priorite: 1, points: 3, statut: "afaire", creeLe: "2026-11-02", projet: { ...defaultProject }, assigne: 2, bloquePar: [] },
+      { id: 3, titre: "Export PDF des factures mensuelles", type: "story", priorite: 2, points: 8, statut: "backlog", creeLe: "2026-10-28", projet: { ...defaultProject }, assigne: null, bloquePar: [] },
+      { id: 4, titre: "Mise à jour du design du Dashboard", type: "tache", priorite: 2, points: 5, statut: "afaire", creeLe: "2026-11-03", projet: { ...defaultProject }, assigne: 3, bloquePar: [] },
+      { id: 5, titre: "Refonte de la gestion du profil utilisateur", type: "story", priorite: 2, points: null, statut: "backlog", creeLe: "2026-10-30", projet: { ...defaultProject }, assigne: null, bloquePar: [] },
+      { id: 6, titre: "Bug d'affichage mode sombre sous Safari", type: "bug", priorite: 3, points: 1, statut: "backlog", creeLe: "2026-10-29", projet: { ...defaultProject }, assigne: 4, bloquePar: [] },
+      { id: 7, titre: "Optimisation de la vitesse des requêtes SQL", type: "tache", priorite: 1, points: 8, statut: "encours", creeLe: "2026-10-25", projet: { ...defaultProject }, assigne: 5, bloquePar: [] },
+      { id: 8, titre: "Intégration du système de notifications push", type: "story", priorite: 3, points: 13, statut: "backlog", creeLe: "2026-11-02", projet: { ...defaultProject }, assigne: null, bloquePar: [] },
+      { id: 9, titre: "Erreur 404 lors du téléchargement de pièces jointes", type: "bug", priorite: 2, points: 2, statut: "termine", creeLe: "2026-10-27", projet: { ...defaultProject }, assigne: 6, bloquePar: [] },
+      { id: 10, titre: "Migration des serveurs vers AWS Cloud", type: "tache", priorite: 3, points: null, statut: "backlog", creeLe: "2026-11-03", projet: { ...defaultProject }, assigne: 7, bloquePar: [] },
+      { id: 11, titre: "Ajout du choix de la langue (i18n Multi-langues)", type: "story", priorite: 3, points: 3, statut: "backlog", creeLe: "2026-10-31", projet: { ...defaultProject }, assigne: 8, bloquePar: [] },
+      { id: 12, titre: "Mise en place de la suite de tests E2E Cypress", type: "tache", priorite: 1, points: 5, statut: "afaire", creeLe: "2026-10-26", projet: { ...defaultProject }, assigne: 9, bloquePar: [] }
     ];
 
     function migrerV2versV3(data) {
@@ -62,6 +62,16 @@
       return data;
     }
 
+    function migrerV4versV5(data) {
+      return {
+        ...data,
+        ...("version" in data ? { version: 5 } : {}),
+        tickets: data.tickets.map(ticket => (
+          ticket.bloquePar === undefined ? { ...ticket, bloquePar: [] } : ticket
+        ))
+      };
+    }
+
     function migrerV1versV2(tableau) {
       if (!Array.isArray(tableau)) return [];
       return tableau.map(t => ({
@@ -74,7 +84,8 @@
     const MIGRATIONS = [
       { version: 2, fn: migrerV1versV2 },
       { version: 3, fn: migrerV2versV3 },
-      { version: 4, fn: migrerV3versV4 }
+      { version: 4, fn: migrerV3versV4 },
+      { version: 5, fn: migrerV4versV5 }
     ];
 
     function migrerJusquaVersion(etat, versionSource) {
@@ -168,12 +179,76 @@
       return null; 
     }
 
+    function ajouterBloquant(liste, idTicket, idBloquant) {
+      const ticket = liste.find(element => element.id === idTicket);
+      if (!ticket) return { ok: false, erreur: "Ticket à bloquer introuvable." };
+
+      const bloquants = Array.isArray(ticket.bloquePar) ? ticket.bloquePar : [];
+      if (bloquants.includes(idBloquant)) {
+        return { ok: false, erreur: `Le ticket #${idBloquant} est déjà un bloquant.` };
+      }
+
+      const visites = new Set();
+      function trouverParcours(idCourant, parcours) {
+        if (idCourant === idTicket) return [...parcours, idCourant];
+        if (visites.has(idCourant)) return null;
+        visites.add(idCourant);
+
+        const ticketCourant = liste.find(element => element.id === idCourant);
+        if (!ticketCourant || !Array.isArray(ticketCourant.bloquePar)) return null;
+
+        for (const idSuivant of ticketCourant.bloquePar) {
+          const resultat = trouverParcours(idSuivant, [...parcours, idCourant]);
+          if (resultat) return resultat;
+        }
+        return null;
+      }
+
+      const parcours = trouverParcours(idBloquant, []);
+      if (parcours) {
+        const cycle = [idTicket, ...parcours].map(id => `#${id}`).join(" → ");
+        return { ok: false, erreur: `Cycle détecté : ${cycle}` };
+      }
+
+      ticket.bloquePar = [...bloquants, idBloquant];
+      return { ok: true, erreur: null };
+    }
+
+    function listerBloquants(liste, ticket) {
+      if (!ticket || !Array.isArray(ticket.bloquePar)) return [];
+      return ticket.bloquePar
+        .map(id => liste.find(element => element.id === id))
+        .filter(bloquant => bloquant)
+        .map(bloquant => ({ id: bloquant.id, titre: bloquant.titre }));
+    }
+
+    function supprimerTicketEtReferences(liste, idTicket) {
+      return liste
+        .filter(ticket => ticket.id !== idTicket)
+        .map(ticket => ({
+          ...ticket,
+          ...(Array.isArray(ticket.bloquePar)
+            ? { bloquePar: ticket.bloquePar.filter(id => id !== idTicket) }
+            : {})
+        }));
+    }
+
     function deplacerTickets(list, idTicket, versStatut) {
       const idx = list.findIndex(t => t.id === idTicket);
       if (idx === -1) return { ok: false, erreur: "Ticket non trouvé dans la liste." };
       const ticket = list[idx];
       const target = COLONNES_KANBAN.find(c => c.id === versStatut);
       if (!target) return { ok: false, erreur: "Colonne destination invalide." };
+
+      if (versStatut === 'encours' && Array.isArray(ticket.bloquePar)) {
+        const bloquantsNonTermines = ticket.bloquePar
+          .map(idBloquant => list.find(element => element.id === idBloquant))
+          .filter(bloquant => bloquant && bloquant.statut !== 'termine')
+          .map(bloquant => `#${bloquant.id}`);
+        if (bloquantsNonTermines.length > 0) {
+          return { ok: false, erreur: `Bloqué par ${bloquantsNonTermines.join(', ')} (non terminés).` };
+        }
+      }
 
       if (ticket.statut === 'termine' && versStatut !== 'termine') {
         return { ok: false, erreur: `Règle R5 : Le ticket "#${ticket.id}" est terminé (état puits).` };
@@ -317,7 +392,7 @@
         maxId = Math.max(maxId, finalId);
 
         const now = new Date().toISOString().split('T')[0];
-        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne });
+        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [] });
         importes++;
       }
       return { ok: true, importes, rejets, nouveauxTickets };
@@ -359,7 +434,7 @@
         maxId = Math.max(maxId, finalId);
 
         const now = new Date().toISOString().split('T')[0];
-        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne });
+        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [] });
         importes++;
       }
       return { ok: true, importes, rejets, nouveauxTickets };
@@ -404,6 +479,23 @@
     function showToastError(msg) { document.getElementById('toast-error-message').textContent = msg; document.getElementById('toast-error').classList.remove('hidden'); }
     function hideToastError() { document.getElementById('toast-error').classList.add('hidden'); }
     function afficherErreur(msg) { showToastError(msg); }
+
+    function echapperHTML(texte) {
+      return String(texte).replace(/[&<>"']/g, caractere => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[caractere]);
+    }
+
+    function rendreBadgeBloquants(liste, ticket) {
+      const bloquants = listerBloquants(liste, ticket);
+      if (bloquants.length === 0) return '';
+      const libelle = bloquants.map(bloquant => `#${bloquant.id} ${bloquant.titre}`).join(', ');
+      return `<div class="text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-1" title="${echapperHTML(libelle)}">🔒 Bloqué par ${echapperHTML(libelle)}</div>`;
+    }
 
     function updateHeaderMetrics(found) {
       document.getElementById('metric-total-tickets').textContent = tickets.length;
@@ -523,6 +615,7 @@
                 <span class="text-[11px] font-mono text-slate-500 font-semibold">#${t.id}</span>
                 <h3 class="text-xs font-semibold text-slate-100 truncate" title="${t.titre}">${t.titre}</h3>
               </div>
+              ${rendreBadgeBloquants(tickets, t)}
               <div class="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
                 <span class="text-slate-300 font-medium bg-slate-800/80 px-1.5 py-0.2 rounded border border-slate-700/60">${t.projet ? t.projet.nom : 'Projet inconnu'}</span>
                 <span>• ${t.creeLe}</span>
@@ -535,6 +628,7 @@
               ${getAssigneBtn(t)}
               ${getPriorityBadge(t.priorite)}${pts}
             </div>
+            <button type="button" onclick="openDependancesModal(${t.id})" class="p-1 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-all" aria-label="Modifier les tickets bloquants de #${t.id}" title="Modifier les bloquants">🔒</button>
             <button onclick="promptDeleteTicket(${t.id}, '${t.titre.replace(/'/g, "\\'")}')" class="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-all">X</button>
           </div>`;
         container.appendChild(card);
@@ -634,12 +728,14 @@
                 <div class="flex items-center gap-1">${getTypeBadge(t.type)}${getPriorityBadge(t.priorite)}</div>
               </div>
               <h4 class="text-xs font-semibold text-slate-100 leading-snug line-clamp-2">${t.titre}</h4>
+              ${rendreBadgeBloquants(tickets, t)}
               <div class="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[10px]">
                 <div class="flex items-center gap-1">
                   ${getAssigneBtn(t)}
                   ${t.points===null?`<span class="text-amber-400 font-medium ml-1">Non estimé</span>`:`<span class="text-blue-400 font-bold ml-1">${t.points} pts</span>`}
                 </div>
                 <div class="flex items-center gap-1">
+                  <button type="button" onclick="openDependancesModal(${t.id})" class="p-1 rounded bg-slate-800 hover:bg-amber-900/50 text-amber-300 transition-colors" aria-label="Modifier les tickets bloquants de #${t.id}" title="Modifier les bloquants">🔒</button>
                   <button onclick="handleMoveTicket(${t.id}, '${prev?prev.id:''}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition-colors" ${(!prev||isTermine)?'disabled':''}>&lt;</button>
                   <button onclick="handleMoveTicket(${t.id}, '${next?next.id:''}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition-colors" ${(!next||isTermine||isDirectToTermineForbidden)?'disabled':''}>&gt;</button>
                 </div>
@@ -1067,7 +1163,8 @@
         projet: { nom: projet },
         description: "",
         majLe: now,
-        assigne: null
+        assigne: null,
+        bloquePar: []
       });
       sauvegarder({ tickets, users, journal });
       closeModal(); renderApp();
@@ -1075,6 +1172,93 @@
     document.getElementById('btn-open-modal').addEventListener('click', openModal);
     document.getElementById('btn-close-modal-x').addEventListener('click', closeModal);
     document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+    // ==========================================
+    // MODIFICATION DES BLOQUANTS
+    // ==========================================
+    const dependancesBackdrop = document.getElementById('dependances-modal-backdrop');
+    const dependancesBox = document.getElementById('dependances-modal-box');
+    let ticketDependancesId = null;
+
+    function afficherTicketsBloquants(ticket) {
+      const liste = document.getElementById('dependances-ticket-list');
+      liste.innerHTML = '';
+      tickets.filter(element => element.id !== ticket.id).forEach(bloquant => {
+        const etiquette = document.createElement('label');
+        etiquette.className = 'flex items-start gap-2 p-2 rounded-lg hover:bg-slate-800/60 cursor-pointer text-xs';
+        const caseACocher = document.createElement('input');
+        caseACocher.type = 'checkbox';
+        caseACocher.value = bloquant.id;
+        caseACocher.checked = Array.isArray(ticket.bloquePar) && ticket.bloquePar.includes(bloquant.id);
+        caseACocher.className = 'mt-0.5 rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0';
+        const texte = document.createElement('span');
+        texte.className = 'text-slate-200';
+        texte.textContent = `#${bloquant.id} ${bloquant.titre}${bloquant.statut === 'termine' ? ' (terminé)' : ''}`;
+        etiquette.append(caseACocher, texte);
+        liste.appendChild(etiquette);
+      });
+      if (liste.childElementCount === 0) {
+        liste.innerHTML = '<p class="text-xs text-slate-500 text-center py-4">Aucun autre ticket disponible.</p>';
+      }
+    }
+
+    window.openDependancesModal = function(id) {
+      const ticket = tickets.find(element => element.id === id);
+      if (!ticket) return;
+      ticketDependancesId = id;
+      document.getElementById('dependances-ticket-title').textContent = `#${ticket.id} - ${ticket.titre}`;
+      document.getElementById('dependances-error').classList.add('hidden');
+      document.getElementById('dependances-error').textContent = '';
+      afficherTicketsBloquants(ticket);
+      dependancesBackdrop.classList.remove('opacity-0', 'pointer-events-none');
+      dependancesBox.classList.remove('scale-95');
+      dependancesBox.classList.add('scale-100');
+    };
+
+    function fermerDependancesModal() {
+      dependancesBackdrop.classList.add('opacity-0', 'pointer-events-none');
+      dependancesBox.classList.remove('scale-100');
+      dependancesBox.classList.add('scale-95');
+      ticketDependancesId = null;
+    }
+
+    document.getElementById('btn-cancel-dependances').addEventListener('click', fermerDependancesModal);
+    document.getElementById('btn-close-dependances-x').addEventListener('click', fermerDependancesModal);
+    document.getElementById('btn-save-dependances').addEventListener('click', () => {
+      const ticket = tickets.find(element => element.id === ticketDependancesId);
+      if (!ticket) {
+        fermerDependancesModal();
+        return;
+      }
+
+      const idsSelectionnes = Array.from(
+        document.querySelectorAll('#dependances-ticket-list input:checked'),
+        element => Number(element.value)
+      );
+      const copieTickets = tickets.map(element => ({
+        ...element,
+        bloquePar: Array.isArray(element.bloquePar) ? [...element.bloquePar] : []
+      }));
+      const copieTicket = copieTickets.find(element => element.id === ticket.id);
+      copieTicket.bloquePar = (Array.isArray(ticket.bloquePar) ? ticket.bloquePar : [])
+        .filter(id => idsSelectionnes.includes(id));
+
+      for (const idBloquant of idsSelectionnes) {
+        if (copieTicket.bloquePar.includes(idBloquant)) continue;
+        const resultat = ajouterBloquant(copieTickets, ticket.id, idBloquant);
+        if (!resultat.ok) {
+          const erreur = document.getElementById('dependances-error');
+          erreur.textContent = resultat.erreur;
+          erreur.classList.remove('hidden');
+          return;
+        }
+      }
+
+      ticket.bloquePar = copieTicket.bloquePar;
+      sauvegarder({ tickets, users, journal });
+      fermerDependancesModal();
+      renderApp();
+    });
 
     // ==========================================
     // SUPPRESSION
@@ -1095,7 +1279,7 @@
     document.getElementById('btn-cancel-delete').addEventListener('click', closeDeleteModal);
     document.getElementById('btn-confirm-delete').addEventListener('click', () => {
       if (ticketIdToDelete !== null) {
-        tickets = tickets.filter(t => t.id !== ticketIdToDelete);
+        tickets = supprimerTicketEtReferences(tickets, ticketIdToDelete);
         sauvegarder({ tickets, users, journal });
         closeDeleteModal(); renderApp();
       }
