@@ -267,6 +267,123 @@
             detail: `Tickets : ${resultat.tickets.length}/${sauvegardeAttendue.tickets.length}, utilisateurs : ${resultat.users.length}/${sauvegardeAttendue.users.length}, journal identique : ${JSON.stringify(resultat.journal) === JSON.stringify(sauvegardeAttendue.journal)}.`
           };
         });
+
+        executerTest('T21', "Champ bloquePar initialisé", () => {
+          const sauvegardeV4 = {
+            tickets: [{ id: 12, titre: 'Nouveau ticket', statut: 'backlog' }],
+            users: [],
+            journal: []
+          };
+          const resultat = migrerV4versV5(sauvegardeV4);
+          return {
+            condition: Array.isArray(resultat.tickets[0].bloquePar) &&
+              resultat.tickets[0].bloquePar.length === 0,
+            detail: `bloquePar obtenu : ${JSON.stringify(resultat.tickets[0].bloquePar)}.`
+          };
+        });
+
+        executerTest('T22', "Déclarer plusieurs bloquants sans doublon", () => {
+          const liste = [
+            { id: 3, titre: 'Préparer les données', statut: 'termine', bloquePar: [] },
+            { id: 5, titre: 'Valider le paiement', statut: 'afaire', bloquePar: [] },
+            { id: 12, titre: 'Publier la facture', statut: 'backlog', bloquePar: [] }
+          ];
+          const premier = ajouterBloquant(liste, 12, 3);
+          const second = ajouterBloquant(liste, 12, 5);
+          const doublon = ajouterBloquant(liste, 12, 3);
+          return {
+            condition: premier.ok && second.ok && !doublon.ok &&
+              JSON.stringify(liste.find(t => t.id === 12).bloquePar) === JSON.stringify([3, 5]),
+            detail: `Résultats : ${JSON.stringify([premier, second, doublon])}; bloquePar : ${JSON.stringify(liste.find(t => t.id === 12).bloquePar)}.`
+          };
+        });
+
+        executerTest('T23', "Bloquant non terminé empêche le passage en cours", () => {
+          const liste = [
+            { id: 3, titre: 'Données prêtes', statut: 'termine', points: 2, bloquePar: [] },
+            { id: 5, titre: 'Paiement validé', statut: 'enrevue', points: 2, bloquePar: [] },
+            { id: 12, titre: 'Publier la facture', statut: 'afaire', points: 3, bloquePar: [3, 5] }
+          ];
+          const refus = deplacerTickets(liste, 12, 'encours');
+          const messageAttendu = 'Bloqué par #5 (non terminés).';
+          liste.find(t => t.id === 5).statut = 'termine';
+          const autorisation = deplacerTickets(liste, 12, 'encours');
+          return {
+            condition: !refus.ok && refus.erreur === messageAttendu && autorisation.ok,
+            detail: `Avec #5 non terminé : ${refus.ok ? 'accepté' : refus.erreur}; une fois terminé : ${autorisation.ok ? 'accepté' : autorisation.erreur}.`
+          };
+        });
+
+        executerTest('T24', "Lister les bloquants pour le badge", () => {
+          const liste = [
+            { id: 3, titre: 'Données prêtes', statut: 'termine', bloquePar: [] },
+            { id: 5, titre: 'Paiement validé', statut: 'afaire', bloquePar: [] },
+            { id: 12, titre: 'Publier la facture', statut: 'backlog', bloquePar: [3, 5, 999] }
+          ];
+          const resultat = listerBloquants(liste, liste.find(t => t.id === 12));
+          const attendu = [
+            { id: 3, titre: 'Données prêtes' },
+            { id: 5, titre: 'Paiement validé' }
+          ];
+          return {
+            condition: JSON.stringify(resultat) === JSON.stringify(attendu),
+            detail: `Bloquants listés : ${JSON.stringify(resultat)}.`
+          };
+        });
+
+        executerTest('T25', "Suppression nettoie les références", () => {
+          const liste = [
+            { id: 3, titre: 'Ticket supprimé', statut: 'backlog', bloquePar: [] },
+            { id: 5, titre: 'Autre bloquant', statut: 'backlog', bloquePar: [] },
+            { id: 12, titre: 'Ticket dépendant', statut: 'backlog', bloquePar: [3, 5] }
+          ];
+          const resultat = supprimerTicketEtReferences(liste, 3);
+          return {
+            condition: resultat !== liste && !resultat.some(t => t.id === 3) &&
+              JSON.stringify(resultat.find(t => t.id === 12).bloquePar) === JSON.stringify([5]) &&
+              JSON.stringify(liste.find(t => t.id === 12).bloquePar) === JSON.stringify([3, 5]),
+            detail: `Résultat : ${JSON.stringify(resultat)}; liste source : ${JSON.stringify(liste)}.`
+          };
+        });
+
+        executerTest('T26', "Cycle refusé avec parcours complet", () => {
+          const liste = [
+            { id: 1, titre: 'A', statut: 'backlog', bloquePar: [2] },
+            { id: 2, titre: 'B', statut: 'backlog', bloquePar: [3] },
+            { id: 3, titre: 'C', statut: 'backlog', bloquePar: [] }
+          ];
+          const resultat = ajouterBloquant(liste, 3, 1);
+          const autoDependance = ajouterBloquant(liste, 1, 1);
+          const cycleAttendu = 'Cycle détecté : #3 → #1 → #2 → #3';
+          const autoDependanceAttendue = 'Cycle détecté : #1 → #1';
+          return {
+            condition: !resultat.ok && resultat.erreur === cycleAttendu &&
+              !autoDependance.ok && autoDependance.erreur === autoDependanceAttendue,
+            detail: `Cycle : ${resultat.erreur}; auto-dépendance : ${autoDependance.erreur}.`
+          };
+        });
+
+        executerTest('T27', "Migration V4 vers V5 conserve les données", () => {
+          const sauvegardeV4 = {
+            version: 4,
+            tickets: [
+              { id: 12, titre: 'Ticket historique', statut: 'backlog', description: 'Conserver', bloquePar: [3] },
+              { id: 3, titre: 'Ticket bloquant', statut: 'termine' }
+            ],
+            users: [{ id: 7, prenom: 'Sam', nom: 'Test' }],
+            journal: [{ ticketId: 12, statutOrigine: 'backlog', statutCible: 'afaire' }],
+            autreDonnee: 'intacte'
+          };
+          const attendue = structuredClone(sauvegardeV4);
+          attendue.version = 5;
+          attendue.tickets[1].bloquePar = [];
+          const resultat = migrerV4versV5(sauvegardeV4);
+          return {
+            condition: VERSION_ACTUELLE === 5 &&
+              JSON.stringify(resultat) === JSON.stringify(attendue),
+            detail: `Version actuelle : ${VERSION_ACTUELLE}; données migrées : ${JSON.stringify(resultat)}.`
+          };
+        });
       } finally {
         journal = journalSauvegarde;
       }
