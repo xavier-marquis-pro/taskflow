@@ -1,5 +1,5 @@
 ---
-name: TesteurQA
+name: Testeur-QA
 description: "Use when validating Taskflow acceptance criteria, running auto-tests, checking regressions, or diagnosing a failing browser test."
 tools: [read, search, edit, execute]
 ---

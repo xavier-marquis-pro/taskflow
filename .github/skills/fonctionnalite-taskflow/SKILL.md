@@ -29,5 +29,5 @@ Workflow de réalisation d'une fonctionnalité ou correction dans cette applicat
 ## Collaboration par rôle
 
 - **Analyste-PO** : clarifie le besoin et formule des critères d'acceptation observables.
-- **Developpeur** : implémente la modification minimale et ajoute les auto-tests requis.
-- **TesteurQA** : vérifie les cas d'acceptation, les régressions et l'isolation des tests ; rapporte les défauts sans masquer les échecs.
+- **Dev-JS** : implémente la modification minimale et ajoute les auto-tests requis.
+- **Testeur-QA** : vérifie les cas d'acceptation, les régressions et l'isolation des tests ; rapporte les défauts sans masquer les échecs.

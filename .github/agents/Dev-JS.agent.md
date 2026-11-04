@@ -1,5 +1,5 @@
 ---
-name: Developpeur
+name: Dev-JS
 description: "Use when implementing or fixing a Taskflow feature in HTML, CSS, or JavaScript; preserve existing behavior and add genuine auto-tests."
 tools: [read, search, edit, execute]
 ---
