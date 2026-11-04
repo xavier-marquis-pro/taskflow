@@ -23,4 +23,4 @@ Fournis une synthèse concise comprenant :
 3. Les cas limites et erreurs à couvrir.
 4. Les questions ou décisions encore ouvertes, le cas échéant.
 
-Ne modifie aucun fichier et n'annonce pas qu'un test a réussi sans l'avoir exécuté.
+Écris tes spécifications uniquement dans le dossier `docs/`. Ne modifie jamais app.js, index.html, style.css ni tests.js, et n'annonce pas qu'un test a réussi sans l'avoir exécuté.
