@@ -17,3 +17,4 @@
 - Garder les tests simples et sans bibliothèque complexe.
 - Exécuter les tests pertinents avant de déclarer une modification validée.
 - Indiquer les tests exécutés, leurs résultats et ceux qui n'ont pas pu être lancés.
+- Ne jamais supprimer, désactiver ou remplacer un test par un résultat écrit en dur. Si un test doit changer, le signaler et expliquer pourquoi.

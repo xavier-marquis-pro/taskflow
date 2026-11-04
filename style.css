@@ -1,0 +1,17 @@
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    #sidebar-filters {
+      transition: width .25s cubic-bezier(.4,0,.2,1), margin .25s cubic-bezier(.4,0,.2,1), opacity .2s ease, padding .25s cubic-bezier(.4,0,.2,1);
+      will-change: width, margin, opacity, padding;
+    }
+    #sidebar-filters.collapsed {
+      width: 0 !important; min-width: 0 !important; margin-right: 0 !important;
+      padding-left: 0 !important; padding-right: 0 !important; opacity: 0; overflow: hidden; border: none !important;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    .dragging { opacity: 0.4; cursor: grabbing; }
+    .btn-filter-active { background-color: #2563eb !important; color: white !important; border-color: #3b82f6 !important; }
