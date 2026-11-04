@@ -200,6 +200,51 @@
             detail: `${mouvements.filter(resultat => resultat.ok).length} mouvements; ${journal.length} entrées conservées, de #${journal[0]?.ticketId} à #${journal[9]?.ticketId}.`
           };
         });
+
+        executerTest('T17', "Destination invalide sans mutation", () => {
+          const liste = structuredClone(TICKETS_DEMO);
+          const statutInitial = liste.find(t => t.id === 6).statut;
+          const mouvementsInitiaux = journal.length;
+          const resultat = deplacerTickets(liste, 6, 'colonne-inconnue');
+          const statutFinal = liste.find(t => t.id === 6).statut;
+          return {
+            condition: !resultat.ok && resultat.erreur === 'Colonne destination invalide.' &&
+              statutFinal === statutInitial && journal.length === mouvementsInitiaux,
+            detail: `${resultat.erreur} Statut conservé : "${statutFinal}"; mouvements ajoutés : ${journal.length - mouvementsInitiaux}.`
+          };
+        });
+
+        executerTest('T18', "Même statut sans entrée d'historique", () => {
+          const liste = structuredClone(TICKETS_DEMO);
+          const statutInitial = liste.find(t => t.id === 6).statut;
+          const mouvementsInitiaux = journal.length;
+          const resultat = deplacerTickets(liste, 6, statutInitial);
+          return {
+            condition: resultat.ok && resultat.ticketsDeplaces[0].statut === statutInitial &&
+              journal.length === mouvementsInitiaux,
+            detail: `Résultat : ${resultat.ok ? 'accepté' : resultat.erreur}; statut : "${liste.find(t => t.id === 6).statut}"; mouvements ajoutés : ${journal.length - mouvementsInitiaux}.`
+          };
+        });
+
+        executerTest('T19', "Ligne CSV incomplète puis valide", () => {
+          const liste = structuredClone(TICKETS_DEMO);
+          const longueurInitiale = liste.length;
+          const statutsInitiaux = liste.map(t => t.statut);
+          const lignes = parserCSV([
+            'id,titre,type,priorite,points,statut',
+            '20,Ligne incomplète,story',
+            '21,Ligne valide,story,2,3,backlog'
+          ].join('\r\n'));
+          const resultat = importerTickets(lignes, liste);
+          const ticketImporte = resultat.nouveauxTickets.find(t => t.id === 21);
+          return {
+            condition: resultat.ok && resultat.importes === 1 && resultat.rejets.length === 1 &&
+              resultat.rejets[0].ligne === 2 && resultat.rejets[0].motif === 'Colonnes manquantes.' &&
+              ticketImporte?.titre === 'Ligne valide' && liste.length === longueurInitiale &&
+              JSON.stringify(liste.map(t => t.statut)) === JSON.stringify(statutsInitiaux),
+            detail: `${resultat.importes} importé(s), ${resultat.rejets.length} rejet(s); source inchangée : ${liste.length === longueurInitiale && JSON.stringify(liste.map(t => t.statut)) === JSON.stringify(statutsInitiaux)}.`
+          };
+        });
       } finally {
         journal = journalSauvegarde;
       }
