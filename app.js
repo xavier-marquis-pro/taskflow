@@ -10,10 +10,10 @@
     ];
 
     // ==========================================
-    // STORAGE VERSIONNÉ (V3) avec Journal
+    // STORAGE VERSIONNÉ (V4) avec Journal
     // ==========================================
     const CLE = "taskflow";
-    const VERSION_ACTUELLE = 3;
+    const VERSION_ACTUELLE = 4;
     const CURRENT_USER_ID = 1;
 
     const USERS_DEMO = [
@@ -58,6 +58,10 @@
       };
     }
 
+    function migrerV3versV4(data) {
+      return data;
+    }
+
     function migrerV1versV2(tableau) {
       if (!Array.isArray(tableau)) return [];
       return tableau.map(t => ({
@@ -69,7 +73,8 @@
 
     const MIGRATIONS = [
       { version: 2, fn: migrerV1versV2 },
-      { version: 3, fn: migrerV2versV3 }
+      { version: 3, fn: migrerV2versV3 },
+      { version: 4, fn: migrerV3versV4 }
     ];
 
     function migrerJusquaVersion(etat, versionSource) {

@@ -245,6 +245,28 @@
             detail: `${resultat.importes} importé(s), ${resultat.rejets.length} rejet(s); source inchangée : ${liste.length === longueurInitiale && JSON.stringify(liste.map(t => t.statut)) === JSON.stringify(statutsInitiaux)}.`
           };
         });
+
+        executerTest('T20', "Migration V3 vers V4", () => {
+          const sauvegardeV3 = {
+            tickets: structuredClone(TICKETS_DEMO),
+            users: structuredClone(USERS_DEMO),
+            journal: [
+              {
+                ticketId: 6,
+                ticketTitre: TICKETS_DEMO.find(t => t.id === 6).titre,
+                statutOrigine: 'backlog',
+                statutCible: 'afaire',
+                date: '2026-11-04T12:00:00.000Z'
+              }
+            ]
+          };
+          const sauvegardeAttendue = structuredClone(sauvegardeV3);
+          const resultat = migrerJusquaVersion(sauvegardeV3, 3);
+          return {
+            condition: JSON.stringify(resultat) === JSON.stringify(sauvegardeAttendue),
+            detail: `Tickets : ${resultat.tickets.length}/${sauvegardeAttendue.tickets.length}, utilisateurs : ${resultat.users.length}/${sauvegardeAttendue.users.length}, journal identique : ${JSON.stringify(resultat.journal) === JSON.stringify(sauvegardeAttendue.journal)}.`
+          };
+        });
       } finally {
         journal = journalSauvegarde;
       }
