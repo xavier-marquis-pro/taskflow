@@ -382,9 +382,9 @@
           attendue.tickets[1].bloquePar = [];
           const resultat = migrerV4versV5(sauvegardeV4);
           return {
-            condition: VERSION_ACTUELLE === 5 &&
+            condition: VERSION_ACTUELLE === 6 && resultat.version === 5 &&
               JSON.stringify(resultat) === JSON.stringify(attendue),
-            detail: `Version actuelle : ${VERSION_ACTUELLE}; données migrées : ${JSON.stringify(resultat)}.`
+            detail: `Version actuelle : ${VERSION_ACTUELLE}; version après migration V4→V5 : ${resultat.version}.`
           };
         });
 
@@ -469,6 +469,146 @@
             detail: `Réouverture ${resultat.ok ? 'acceptée à tort' : `refusée : ${resultat.erreur}`}; #55 reste "${liste[0].statut}".`
           };
         });
+
+        executerTest('T34', "Migration V5 vers V6 ajoute les échéances manquantes", () => {
+          const sauvegardeV5 = {
+            version: 5,
+            tickets: [
+              { id: 1, titre: 'Sans échéance', statut: 'backlog' },
+              { id: 2, titre: 'Échéance conservée', statut: 'afaire', dateEcheance: '2026-11-30' }
+            ],
+            users: [{ id: 1, prenom: 'Alice', nom: 'Martin' }],
+            journal: [{ ticketId: 1, statutOrigine: 'backlog', statutCible: 'afaire' }]
+          };
+          const resultat = migrerV5versV6(sauvegardeV5);
+          return {
+            condition: resultat.version === 6 && resultat.tickets[0].dateEcheance === null &&
+              resultat.tickets[1].dateEcheance === '2026-11-30' &&
+              JSON.stringify(resultat.users) === JSON.stringify(sauvegardeV5.users) &&
+              JSON.stringify(resultat.journal) === JSON.stringify(sauvegardeV5.journal),
+            detail: `Version ${resultat.version}; échéances : ${resultat.tickets.map(ticket => ticket.dateEcheance).join(', ')}.`
+          };
+        });
+
+        executerTest('T35', "Badges J-2 et retard aux limites de date", () => {
+          const ticket = { statut: 'encours', dateEcheance: '2004-11-29' };
+          const resultat = [
+            obtenirBadgeEcheance(ticket, '2004-11-27'),
+            obtenirBadgeEcheance(ticket, '2004-11-28'),
+            obtenirBadgeEcheance(ticket, '2004-11-29'),
+            obtenirBadgeEcheance(ticket, '2004-11-30')
+          ];
+          const ticketTermine = { ...ticket, statut: 'termine' };
+          return {
+            condition: JSON.stringify(resultat) === JSON.stringify([null, 'j2', 'j2', 'retard']) &&
+              obtenirBadgeEcheance(ticketTermine, '2004-11-30') === null,
+            detail: `27→${resultat[0]}; 28→${resultat[1]}; 29→${resultat[2]}; 30→${resultat[3]}; terminé→${obtenirBadgeEcheance(ticketTermine, '2004-11-30')}.`
+          };
+        });
+
+        executerTest('T36', "Filtres d'urgence combinés en union", () => {
+          const liste = [
+            { id: 1, statut: 'afaire', dateEcheance: '2004-11-28' },
+            { id: 2, statut: 'afaire', dateEcheance: '2004-11-30' },
+            { id: 3, statut: 'afaire', dateEcheance: '2004-12-10' },
+            { id: 4, statut: 'termine', dateEcheance: '2004-11-20' }
+          ];
+          const seulementRetards = filtrerTicketsParUrgence(liste, true, false, '2004-11-29');
+          const seulementJ2 = filtrerTicketsParUrgence(liste, false, true, '2004-11-29');
+          const toutesUrgences = filtrerTicketsParUrgence(liste, true, true, '2004-11-29');
+          const aucuneCase = filtrerTicketsParUrgence(liste, false, false, '2004-11-29');
+          return {
+            condition: JSON.stringify(seulementRetards.map(ticket => ticket.id)) === JSON.stringify([1]) &&
+              JSON.stringify(seulementJ2.map(ticket => ticket.id)) === JSON.stringify([2]) &&
+              JSON.stringify(toutesUrgences.map(ticket => ticket.id)) === JSON.stringify([1, 2]) &&
+              aucuneCase.length === liste.length,
+            detail: `Retards : ${seulementRetards.map(ticket => ticket.id)}; J-2 : ${seulementJ2.map(ticket => ticket.id)}; union : ${toutesUrgences.map(ticket => ticket.id)}.`
+          };
+        });
+
+        executerTest('T37', "Compteur de retards par statut", () => {
+          const liste = [
+            { statut: 'backlog', dateEcheance: '2004-11-28' },
+            { statut: 'backlog', dateEcheance: '2004-11-29' },
+            { statut: 'encours', dateEcheance: '2004-11-27' },
+            { statut: 'termine', dateEcheance: '2004-11-20' }
+          ];
+          const resultat = compterRetardsParStatut(liste, '2004-11-29');
+          return {
+            condition: resultat.backlog === 1 && resultat.encours === 1 &&
+              resultat.afaire === 0 && resultat.termine === 0,
+            detail: `Backlog : ${resultat.backlog}; En cours : ${resultat.encours}; Terminé : ${resultat.termine}.`
+          };
+        });
+
+        executerTest('T38', "Tri Kanban remonte les échéances les plus dépassées", () => {
+          const liste = [
+            { id: 1, statut: 'afaire', dateEcheance: '2004-11-28' },
+            { id: 2, statut: 'afaire', dateEcheance: '2004-11-20' },
+            { id: 3, statut: 'afaire', dateEcheance: '2004-11-29' },
+            { id: 4, statut: 'afaire', dateEcheance: null }
+          ];
+          const resultat = trierTicketsParUrgence(liste, '2004-11-29');
+          return {
+            condition: JSON.stringify(resultat.map(ticket => ticket.id)) === JSON.stringify([2, 1, 3, 4]),
+            detail: `Ordre obtenu : ${resultat.map(ticket => `#${ticket.id}`).join(', ')}.`
+          };
+        });
+
+        executerTest('T39', "Grille calendrier commence le lundi et couvre le mois", () => {
+          const cellules = calculerCellulesCalendrier(2024, 1);
+          const joursDuMois = cellules.filter(cellule => cellule.dansMois);
+          return {
+            condition: cellules.length % 7 === 0 && cellules[0].date === '2024-01-29' &&
+              joursDuMois.length === 29 && joursDuMois[0].date === '2024-02-01' &&
+              joursDuMois[28].date === '2024-02-29',
+            detail: `${cellules.length} cases; premier jour affiché ${cellules[0].date}; jours du mois : ${joursDuMois.length}.`
+          };
+        });
+
+        executerTest('T40', "Import JSON conserve une échéance valide", () => {
+          const resultat = importerJSON(JSON.stringify([
+            { id: 101, titre: 'Avec échéance', type: 'story', priorite: 2, points: 3, statut: 'backlog', dateEcheance: '2026-12-01' },
+            { id: 102, titre: 'Date invalide', type: 'story', priorite: 2, points: 3, statut: 'backlog', dateEcheance: '2026-02-30' }
+          ]), []);
+          const ticketImporte = resultat.nouveauxTickets.find(ticket => ticket.id === 101);
+          return {
+            condition: resultat.ok && resultat.importes === 1 &&
+              ticketImporte.dateEcheance === '2026-12-01' &&
+              resultat.rejets.length === 1 && resultat.rejets[0].motif.includes("Date d'échéance"),
+            detail: `${resultat.importes} importé(s), ${resultat.rejets.length} rejet(s); date conservée : ${ticketImporte?.dateEcheance}.`
+          };
+        });
+
+        executerTest('T41', "Import CSV conserve une échéance valide", () => {
+          const resultat = importerTickets(parserCSV([
+            'id,titre,type,priorite,points,statut,dateEcheance',
+            '101,Ticket daté,story,2,3,backlog,2026-12-01'
+          ].join('\r\n')), []);
+          const ticketImporte = resultat.nouveauxTickets?.find(ticket => ticket.id === 101);
+          return {
+            condition: resultat.ok && resultat.importes === 1 &&
+              ticketImporte?.dateEcheance === '2026-12-01',
+            detail: `Importés : ${resultat.importes}; date : ${ticketImporte?.dateEcheance}.`
+          };
+        });
+
+        executerTest('T42', "Bloc échéance compact affiche date, badge et calendrier", () => {
+          const dateEcheance = decalerDateISO(obtenirDateLocaleISO(), 1);
+          const ticket = { id: 77, statut: 'encours', dateEcheance };
+          const section = rendreSectionEcheance(ticket);
+          const sectionSansDate = rendreSectionEcheance({ ...ticket, dateEcheance: null });
+          return {
+            condition: section.includes(`Échéance : ${formaterDateEcheance(dateEcheance)}`) &&
+              section.includes('J-2') && section.includes('type="date"') &&
+              section.includes('calendar-days') &&
+              section.includes(`aria-label="Ouvrir le formulaire d'échéance du ticket #77"`) &&
+              sectionSansDate.includes('Aucune échéance') &&
+              !sectionSansDate.includes('>J-2</span>') &&
+              section.includes('border-t border-slate-800/70'),
+            detail: `Date lisible, badge, saisie date native et séparation des contrôles ${section.includes('type="date"') && section.includes('calendar-days') ? 'présents' : 'absents'}.`
+          };
+        });
       } finally {
         journal = journalSauvegarde;
       }
@@ -490,7 +630,7 @@
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col justify-between">
           <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fonctions testées</span>
-          <span class="text-xs font-mono text-blue-400 mt-1">deplacerTickets(), enregistrerMouvement(), statutApresControleWip(), parserCSV(), importerTickets(), importerJSON(), calculerStatistiquesKanban(), migrerV2versV3(), validerTicketMetier()</span>
+          <span class="text-xs font-mono text-blue-400 mt-1">deplacerTickets(), obtenirBadgeEcheance(), filtrerTicketsParUrgence(), trierTicketsParUrgence(), compterRetardsParStatut(), calculerCellulesCalendrier(), migrerV5versV6(), parserCSV(), importerTickets(), importerJSON()</span>
         </div>`;
       document.getElementById('tests-passed-count').textContent = `${pass} / ${total} validés`;
       

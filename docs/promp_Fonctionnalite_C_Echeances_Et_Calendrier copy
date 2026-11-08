@@ -1,0 +1,30 @@
+- Ajouter sur chaque ticket un champ dateEcheance , représentant la date d'échéance à laquelle le ticket doit être terminé.
+
+Par définition, un ticket sera considéré comme : 
+* "J-2"        si statut différent de "Terminé" et ( dateDuJour > (dateEcheance - 2j) et (dateDuJour <= dateEcheance )
+* "en retard"  si statut différent de "Terminé" et dateDuJour > dateEcheance
+
+Autrement dit, un ticket ayant une dateEcheance fixée, mais dont le statut ne passe jamais à Terminé  devrait commencer, pour la plupart à sans badge, ni " passer au badge "J-2", puis au badge "en retard".
+
+Exemple : 
+    Ticket t1   en cours   dateEcheance = 29/11/2004   
+    dateDuJour = 27/11/2004  ==> t1  sans badge
+    dateDuJour = 28/11/2004  ==> t1  avec badge "J-2"
+    dateDuJour = 29/11/2004  ==> t1  avec badge "J-2"
+    dateDuJour = 30/11/2004  ==> t1  avec badge "en retard"
+
+On n'attribuera qu'un badge à chaque ticket que si une de ces 2 conditions est atteinte.
+Un seul badge suffira, étant donné que les 2 conditions sont disjointes.
+Le badge sera visible dans toutes les vues ( backlog, kanban, calendrier, etc ...).
+
+- Ajouter, à coté de l'onglet Backlog, Kanban, et juste avant Autotest, l'onglet Calendrier ; il permettra d'afficher la vue calendrier mensuelle, et de naviguer mois par mois sur les jours pour afficher les tickets ayant une dateEcheance non nulle ( fixée )
+
+- Dans les colonnes de statut du kanban, on rajoutera en entête, le résumé des retards par colonne ( nombre de tickets en retard ) 
+
+- Dans la vue kaban et backlog, mettre un booléen "en retard" permettant de filtrer pour n'afficher que les tickets avec le badge "en retard" ; Dans la vue kaban et backlog, mettre un booléen "J-2" permettant de filtrer pour n'afficher que les tickets en badge "J-2"  ; Le booléen "en retard" et "J-2" se combinerait pour afficher toutes les urgences et pas encore terminé à J-2.
+Les case à cocher seront désactivées par défaut.
+
+- Dans la vue kaban, les tickets les plus en retard serait affichés le plus en haut possible dans la colonne de leur statut.
+
+- En cas d'incohérence fonctionnelle, arrête toi et demande moi quoi faire.
+- En cas d'incohérence fonctionnelle, arrête toi et demande moi quoi faire.

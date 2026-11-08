@@ -10,10 +10,10 @@
     ];
 
     // ==========================================
-    // STORAGE VERSIONNÉ (V5) avec Journal
+    // STORAGE VERSIONNÉ (V6) avec échéances
     // ==========================================
     const CLE = "taskflow";
-    const VERSION_ACTUELLE = 5;
+    const VERSION_ACTUELLE = 6;
     const CURRENT_USER_ID = 1;
 
     const USERS_DEMO = [
@@ -41,7 +41,7 @@
       { id: 10, titre: "Migration des serveurs vers AWS Cloud", type: "tache", priorite: 3, points: null, statut: "backlog", creeLe: "2026-11-03", projet: { ...defaultProject }, assigne: 7, bloquePar: [] },
       { id: 11, titre: "Ajout du choix de la langue (i18n Multi-langues)", type: "story", priorite: 3, points: 3, statut: "backlog", creeLe: "2026-10-31", projet: { ...defaultProject }, assigne: 8, bloquePar: [] },
       { id: 12, titre: "Mise en place de la suite de tests E2E Cypress", type: "tache", priorite: 1, points: 5, statut: "afaire", creeLe: "2026-10-26", projet: { ...defaultProject }, assigne: 9, bloquePar: [] }
-    ];
+    ].map(ticket => ({ ...ticket, dateEcheance: null }));
 
     function migrerV2versV3(data) {
       if (Array.isArray(data)) {
@@ -72,6 +72,16 @@
       };
     }
 
+    function migrerV5versV6(data) {
+      return {
+        ...data,
+        ...("version" in data ? { version: 6 } : {}),
+        tickets: data.tickets.map(ticket => (
+          ticket.dateEcheance === undefined ? { ...ticket, dateEcheance: null } : ticket
+        ))
+      };
+    }
+
     function migrerV1versV2(tableau) {
       if (!Array.isArray(tableau)) return [];
       return tableau.map(t => ({
@@ -85,7 +95,8 @@
       { version: 2, fn: migrerV1versV2 },
       { version: 3, fn: migrerV2versV3 },
       { version: 4, fn: migrerV3versV4 },
-      { version: 5, fn: migrerV4versV5 }
+      { version: 5, fn: migrerV4versV5 },
+      { version: 6, fn: migrerV5versV6 }
     ];
 
     function migrerJusquaVersion(etat, versionSource) {
@@ -157,6 +168,9 @@
     let sortCriteria = [{ field: 'priorite', dir: 'asc' }, { field: 'points', dir: 'asc' }];
     let currentImportFileText = null;
     let currentImportFileType = null;
+    let moisCalendrier = new Date();
+    moisCalendrier.setDate(1);
+    let ticketEcheanceId = null;
 
     // 2. RÈGLES
     // ==========================================
@@ -168,6 +182,93 @@
 
     function getInitials(prenom, nom) {
       return `${prenom.charAt(0)}${nom.charAt(0)}`.toUpperCase();
+    }
+
+    function estDateISOValide(date) {
+      if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+      const objetDate = new Date(`${date}T00:00:00.000Z`);
+      return !Number.isNaN(objetDate.getTime()) && objetDate.toISOString().slice(0, 10) === date;
+    }
+
+    function obtenirDateLocaleISO(date = new Date()) {
+      const annee = date.getFullYear();
+      const mois = String(date.getMonth() + 1).padStart(2, '0');
+      const jour = String(date.getDate()).padStart(2, '0');
+      return `${annee}-${mois}-${jour}`;
+    }
+
+    function decalerDateISO(date, nombreJours) {
+      if (!estDateISOValide(date)) return null;
+      const objetDate = new Date(`${date}T00:00:00.000Z`);
+      objetDate.setUTCDate(objetDate.getUTCDate() + nombreJours);
+      return objetDate.toISOString().slice(0, 10);
+    }
+
+    function obtenirBadgeEcheance(ticket, dateDuJour = obtenirDateLocaleISO()) {
+      if (!ticket || ticket.statut === 'termine' || !estDateISOValide(ticket.dateEcheance) ||
+          !estDateISOValide(dateDuJour)) return null;
+      if (dateDuJour > ticket.dateEcheance) return 'retard';
+
+      const debutAlerte = decalerDateISO(ticket.dateEcheance, -2);
+      return dateDuJour > debutAlerte && dateDuJour <= ticket.dateEcheance ? 'j2' : null;
+    }
+
+    function normaliserDateEcheanceImportee(valeur) {
+      if (valeur === undefined || valeur === null || valeur === '') {
+        return { ok: true, dateEcheance: null };
+      }
+      if (!estDateISOValide(valeur)) {
+        return { ok: false, dateEcheance: null };
+      }
+      return { ok: true, dateEcheance: valeur };
+    }
+
+    function filtrerTicketsParUrgence(liste, filtreRetard, filtreJ2, dateDuJour = obtenirDateLocaleISO()) {
+      if (!filtreRetard && !filtreJ2) return [...liste];
+      return liste.filter(ticket => {
+        const badge = obtenirBadgeEcheance(ticket, dateDuJour);
+        return (filtreRetard && badge === 'retard') || (filtreJ2 && badge === 'j2');
+      });
+    }
+
+    function trierTicketsParUrgence(liste, dateDuJour = obtenirDateLocaleISO()) {
+      const rangs = { retard: 0, j2: 1 };
+      return liste
+        .map((ticket, index) => ({ ticket, index, badge: obtenirBadgeEcheance(ticket, dateDuJour) }))
+        .sort((a, b) => {
+          const rangA = rangs[a.badge] ?? 2;
+          const rangB = rangs[b.badge] ?? 2;
+          if (rangA !== rangB) return rangA - rangB;
+          if (a.badge === 'retard' && a.ticket.dateEcheance !== b.ticket.dateEcheance) {
+            return a.ticket.dateEcheance.localeCompare(b.ticket.dateEcheance);
+          }
+          return a.index - b.index;
+        })
+        .map(element => element.ticket);
+    }
+
+    function compterRetardsParStatut(liste, dateDuJour = obtenirDateLocaleISO()) {
+      const retards = Object.fromEntries(COLONNES_KANBAN.map(colonne => [colonne.id, 0]));
+      liste.forEach(ticket => {
+        if (obtenirBadgeEcheance(ticket, dateDuJour) === 'retard' && ticket.statut in retards) {
+          retards[ticket.statut]++;
+        }
+      });
+      return retards;
+    }
+
+    function calculerCellulesCalendrier(annee, mois) {
+      const premierJour = new Date(annee, mois, 1);
+      const decalage = (premierJour.getDay() + 6) % 7;
+      const nombreJours = new Date(annee, mois + 1, 0).getDate();
+      const nombreCellules = Math.ceil((decalage + nombreJours) / 7) * 7;
+      return Array.from({ length: nombreCellules }, (_, index) => {
+        const date = new Date(annee, mois, index - decalage + 1);
+        return {
+          date: obtenirDateLocaleISO(date),
+          dansMois: date.getMonth() === mois
+        };
+      });
     }
 
     function validerTicketMetier(titre, typeNorm, prio, points, statut, ticketsList) {
@@ -371,6 +472,7 @@
 
       const col = {}; attendus.forEach(a => col[a] = header.indexOf(a));
       const colAssigne = header.indexOf('assigne');
+      const colDateEcheance = header.indexOf('dateecheance');
 
       let importes = 0, rejets = [], nouveauxTickets = [...ticketsExistants];
       let maxId = nouveauxTickets.reduce((max, t) => Math.max(max, t.id), 0);
@@ -390,6 +492,13 @@
         let statut = (row[col['statut']]?.trim() || '').toLowerCase();
         let titre = row[col['titre']]?.trim();
         let assigne = colAssigne !== -1 && row[colAssigne] ? parseInt(row[colAssigne].trim(), 10) : null;
+        const dateEcheance = normaliserDateEcheanceImportee(
+          colDateEcheance !== -1 ? row[colDateEcheance]?.trim() : null
+        );
+        if (!dateEcheance.ok) {
+          rejets.push({ ligne: lineNum, motif: "Date d'échéance invalide (format attendu : AAAA-MM-JJ)." });
+          continue;
+        }
 
         const motifRejet = validerTicketMetier(titre, typeNorm, prio, points, statut, nouveauxTickets);
         if (motifRejet) { rejets.push({ ligne: lineNum, motif: motifRejet }); continue; }
@@ -402,7 +511,7 @@
         maxId = Math.max(maxId, finalId);
 
         const now = new Date().toISOString().split('T')[0];
-        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [] });
+        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [], dateEcheance: dateEcheance.dateEcheance });
         importes++;
       }
       return { ok: true, importes, rejets, nouveauxTickets };
@@ -432,6 +541,11 @@
         let statut = (item.statut || '').trim().toLowerCase();
         let titre = (item.titre || '').trim();
         let assigne = item.assigne !== undefined ? parseInt(item.assigne, 10) : null;
+        const dateEcheance = normaliserDateEcheanceImportee(item.dateEcheance);
+        if (!dateEcheance.ok) {
+          rejets.push({ ligne: lineNum, motif: "Date d'échéance invalide (format attendu : AAAA-MM-JJ)." });
+          continue;
+        }
 
         const motifRejet = validerTicketMetier(titre, typeNorm, prio, points, statut, nouveauxTickets);
         if (motifRejet) { rejets.push({ ligne: lineNum, motif: motifRejet }); continue; }
@@ -444,7 +558,7 @@
         maxId = Math.max(maxId, finalId);
 
         const now = new Date().toISOString().split('T')[0];
-        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [] });
+        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [], dateEcheance: dateEcheance.dateEcheance });
         importes++;
       }
       return { ok: true, importes, rejets, nouveauxTickets };
@@ -507,6 +621,47 @@
       return `<div class="text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-1" title="${echapperHTML(libelle)}">🔒 Bloqué par ${echapperHTML(libelle)}</div>`;
     }
 
+    function rendreBadgeEcheance(ticket) {
+      const badge = obtenirBadgeEcheance(ticket);
+      if (badge === 'retard') {
+        return '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">En retard</span>';
+      }
+      if (badge === 'j2') {
+        return '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">J-2</span>';
+      }
+      return '';
+    }
+
+    function formaterDateEcheance(dateEcheance) {
+      if (!estDateISOValide(dateEcheance)) return 'Aucune échéance';
+      const [annee, mois, jour] = dateEcheance.split('-').map(Number);
+      return new Intl.DateTimeFormat('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+      }).format(new Date(annee, mois - 1, jour));
+    }
+
+    function rendreControleEcheance(ticket) {
+      const dateEcheance = estDateISOValide(ticket.dateEcheance) ? ticket.dateEcheance : '';
+      return `<div class="flex items-center gap-1.5 text-[10px] text-slate-400">
+        <label class="flex min-w-0 flex-1 items-center gap-1.5">Date
+          <input type="date" value="${dateEcheance}" aria-label="Date d'échéance du ticket #${ticket.id}" title="Saisir une date ou choisir dans le calendrier" onchange="window.modifierDateEcheance(${ticket.id}, this.value)" class="min-w-0 flex-1 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-slate-200 focus:outline-none focus:border-blue-500">
+        </label>
+        <button type="button" onclick="window.ouvrirModalEcheance(${ticket.id})" class="shrink-0 p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-blue-300" aria-label="Ouvrir le formulaire d'échéance du ticket #${ticket.id}" title="Options d'échéance"><i data-lucide="calendar-days" class="w-3.5 h-3.5"></i></button>
+      </div>`;
+    }
+
+    function rendreSectionEcheance(ticket) {
+      return `<section class="mt-2 rounded-md border border-slate-800/80 bg-slate-950/30 p-2 space-y-1.5" aria-label="Échéance du ticket #${ticket.id}">
+        <div class="flex items-center justify-between gap-2 min-w-0">
+          <span class="text-[10px] text-slate-400 truncate">Échéance : ${formaterDateEcheance(ticket.dateEcheance)}</span>
+          ${rendreBadgeEcheance(ticket)}
+        </div>
+        <div class="border-t border-slate-800/70 pt-1.5">${rendreControleEcheance(ticket)}</div>
+      </section>`;
+    }
+
     function updateHeaderMetrics(found) {
       document.getElementById('metric-total-tickets').textContent = tickets.length;
       document.getElementById('metric-found-tickets').textContent = found;
@@ -564,11 +719,21 @@
     // ==========================================
     function renderApp() {
       renderSortControls();
+
+      if (currentView === 'calendrier') {
+        const ticketsDuMois = renderCalendrier(tickets);
+        updateHeaderMetrics(ticketsDuMois);
+        document.getElementById('showing-count').textContent = `${ticketsDuMois} échéance(s) ce mois`;
+        lucide.createIcons();
+        return;
+      }
       
       const q = document.getElementById('search-input').value.trim().toLowerCase();
       const types = Array.from(document.querySelectorAll('.filter-type:checked')).map(cb => cb.value);
       const prios = Array.from(document.querySelectorAll('.filter-priority:checked')).map(cb => Number(cb.value));
       const stats = Array.from(document.querySelectorAll('.filter-status:checked')).map(cb => cb.value);
+      const filtreRetard = document.getElementById('filter-deadline-late').checked;
+      const filtreJ2 = document.getElementById('filter-deadline-j2').checked;
       
       const filterUser = document.getElementById('filter-user-select').value;
       const isMyTicketsActive = document.getElementById('btn-my-tickets').classList.contains('btn-filter-active');
@@ -577,10 +742,11 @@
       document.getElementById('filter-priority-all').checked = prios.length === 3;
       document.getElementById('filter-status-all').checked = stats.length === 5;
 
-      const isFiltered = q !== '' || types.length < 3 || prios.length < 3 || stats.length < 5 || filterUser !== 'all' || isMyTicketsActive;
+      const isFiltered = q !== '' || types.length < 3 || prios.length < 3 || stats.length < 5 ||
+        filterUser !== 'all' || isMyTicketsActive || filtreRetard || filtreJ2;
       document.getElementById('btn-reset-filters').classList.toggle('hidden', !isFiltered);
 
-      const filtered = tickets.filter(t => {
+      let filtered = tickets.filter(t => {
         if (!t.titre.toLowerCase().includes(q)) return false;
         if (!types.includes(t.type)) return false;
         if (!prios.includes(t.priorite)) return false;
@@ -595,6 +761,8 @@
 
         return true;
       });
+
+      filtered = filtrerTicketsParUrgence(filtered, filtreRetard, filtreJ2);
       
       const sorted = sortTickets(filtered);
 
@@ -603,6 +771,7 @@
 
       if (currentView === 'backlog') renderBacklogView(sorted);
       else if (currentView === 'kanban') renderKanbanView(sorted);
+      lucide.createIcons();
     }
 
     function renderBacklogView(list) {
@@ -626,7 +795,9 @@
                 <h3 class="text-xs font-semibold text-slate-100 truncate" title="${t.titre}">${t.titre}</h3>
               </div>
               ${rendreBadgeBloquants(tickets, t)}
+              <div class="flex items-center gap-1.5 flex-wrap">${rendreBadgeEcheance(t)}</div>
               <div class="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
+                ${t.dateEcheance ? `<span>Échéance : ${t.dateEcheance}</span>` : ''}
                 <span class="text-slate-300 font-medium bg-slate-800/80 px-1.5 py-0.2 rounded border border-slate-700/60">${t.projet ? t.projet.nom : 'Projet inconnu'}</span>
                 <span>• ${t.creeLe}</span>
                 <span>• Statut: <span class="text-slate-200 font-semibold uppercase">${t.statut}</span></span>
@@ -638,6 +809,7 @@
               ${getAssigneBtn(t)}
               ${getPriorityBadge(t.priorite)}${pts}
             </div>
+            ${rendreControleEcheance(t)}
             <button type="button" onclick="openDependancesModal(${t.id})" class="p-1 text-slate-400 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-all" aria-label="Modifier les tickets bloquants de #${t.id}" title="Modifier les bloquants">🔒</button>
             <button onclick="promptDeleteTicket(${t.id}, '${t.titre.replace(/'/g, "\\'")}')" class="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded transition-all">X</button>
           </div>`;
@@ -645,9 +817,68 @@
       });
     }
 
+    function renderCalendrier(listeTickets) {
+      const titre = document.getElementById('calendar-month-title');
+      const grille = document.getElementById('calendar-grid');
+      const annee = moisCalendrier.getFullYear();
+      const mois = moisCalendrier.getMonth();
+      titre.textContent = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' })
+        .format(moisCalendrier);
+      grille.innerHTML = '';
+
+      const cellules = calculerCellulesCalendrier(annee, mois);
+      const prefixeMois = `${annee}-${String(mois + 1).padStart(2, '0')}`;
+      const ticketsDuMois = listeTickets.filter(ticket =>
+        estDateISOValide(ticket.dateEcheance) && ticket.dateEcheance.startsWith(prefixeMois)
+      );
+
+      cellules.forEach(cellule => {
+        const caseJour = document.createElement('div');
+        caseJour.className = `min-h-28 p-1.5 border border-slate-800/80 rounded-lg ${cellule.dansMois ? 'bg-slate-900/70' : 'bg-slate-950/40 text-slate-600'}`;
+
+        const numeroJour = document.createElement('div');
+        numeroJour.className = 'text-[10px] font-semibold text-slate-400 mb-1';
+        numeroJour.textContent = String(Number(cellule.date.slice(-2)));
+        caseJour.appendChild(numeroJour);
+
+        listeTickets
+          .filter(ticket => cellule.dansMois && ticket.dateEcheance === cellule.date)
+          .sort((a, b) => a.titre.localeCompare(b.titre))
+          .forEach(ticket => {
+            const carte = document.createElement('article');
+            carte.className = 'mb-1 p-1.5 rounded bg-slate-800/80 border border-slate-700/70 space-y-1';
+
+            const titreTicket = document.createElement('div');
+            titreTicket.className = 'text-[10px] leading-snug text-slate-200 break-words';
+            titreTicket.textContent = `#${ticket.id} ${ticket.titre}`;
+            carte.appendChild(titreTicket);
+
+            const badge = document.createElement('div');
+            badge.innerHTML = rendreBadgeEcheance(ticket);
+            if (badge.firstElementChild) carte.appendChild(badge);
+
+            const statut = document.createElement('div');
+            statut.className = 'text-[9px] text-slate-400';
+            statut.textContent = ticket.statut;
+            carte.appendChild(statut);
+
+            const controles = document.createElement('div');
+            controles.innerHTML = rendreControleEcheance(ticket);
+            carte.appendChild(controles);
+            caseJour.appendChild(carte);
+          });
+
+        grille.appendChild(caseJour);
+      });
+
+      return ticketsDuMois.length;
+    }
+
     function renderKanbanView(list) {
+      const ticketsTries = trierTicketsParUrgence(list);
       const statistiques = calculerStatistiquesKanban(tickets);
       const { total, encours, enrevue, pointsTotal, pointsTermines, pct, nonEstimes } = statistiques;
+      const retardsParStatut = compterRetardsParStatut(tickets);
 
       const db = document.getElementById('dashboard-kpi');
       db.innerHTML = `
@@ -678,7 +909,7 @@
       board.innerHTML = '';
 
       COLONNES_KANBAN.forEach((col, idx) => {
-        const colTickets = list.filter(t => t.statut === col.id);
+        const colTickets = ticketsTries.filter(t => t.statut === col.id);
         const totalAll = tickets.filter(t => t.statut === col.id).length;
         const el = document.createElement('div');
         el.className = "flex flex-col bg-slate-900/60 border border-slate-800/90 rounded-xl p-2.5 h-full overflow-hidden min-h-[400px]";
@@ -710,7 +941,10 @@
         el.innerHTML = `
           <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
             <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider">${col.titre}</h3>
-            ${wipBadge}
+            <div class="flex items-center gap-1">
+              <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${retardsParStatut[col.id] ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-slate-400'}">Retards : ${retardsParStatut[col.id]}</span>
+              ${wipBadge}
+            </div>
           </div>
           <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="kanban-col-${col.id}"></div>`;
         board.appendChild(el);
@@ -738,7 +972,8 @@
               </div>
               <h4 class="text-xs font-semibold text-slate-100 leading-snug line-clamp-2">${t.titre}</h4>
               ${rendreBadgeBloquants(tickets, t)}
-              <div class="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[10px]">
+              ${rendreSectionEcheance(t)}
+              <div class="flex items-center justify-between gap-1 pt-1 border-t border-slate-800/80 text-[10px]">
                 <div class="flex items-center gap-1">
                   ${getAssigneBtn(t)}
                   ${t.points===null?`<span class="text-amber-400 font-medium ml-1">Non estimé</span>`:`<span class="text-blue-400 font-bold ml-1">${t.points} pts</span>`}
@@ -938,20 +1173,27 @@
     // ==========================================
     const tabBacklog = document.getElementById('tab-backlog');
     const tabKanban = document.getElementById('tab-kanban');
+    const tabCalendar = document.getElementById('tab-calendar');
     const tabAutoTest = document.getElementById('tab-autotest');
     const viewBacklog = document.getElementById('view-backlog');
     const viewKanban = document.getElementById('view-kanban');
+    const viewCalendar = document.getElementById('view-calendar');
     const viewAutoTest = document.getElementById('view-autotest');
     const sortBar = document.getElementById('sort-bar-container');
+    const sidebar = document.getElementById('sidebar-filters');
 
     function setActiveTab(active) {
-      const base = "px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ";
+      const base = "px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap ";
       tabBacklog.className = base + "text-slate-400 hover:text-slate-200";
       tabKanban.className = base + "text-slate-400 hover:text-slate-200";
+      tabCalendar.className = base + "text-slate-400 hover:text-slate-200";
       tabAutoTest.className = base + "text-slate-400 hover:text-slate-300";
       viewBacklog.classList.add('hidden');
       viewKanban.classList.add('hidden');
+      viewCalendar.classList.add('hidden');
       viewAutoTest.classList.add('hidden');
+      sidebar.classList.remove('hidden');
+      toggleBtn.classList.toggle('hidden', active === 'calendar');
 
       if (active === 'backlog') {
         currentView = 'backlog';
@@ -964,6 +1206,12 @@
         viewKanban.classList.remove('hidden');
         viewKanban.classList.add('flex');
         sortBar.classList.add('hidden');
+      } else if (active === 'calendar') {
+        currentView = 'calendrier';
+        tabCalendar.className = base + "bg-blue-600 text-white shadow-sm";
+        viewCalendar.classList.remove('hidden');
+        sortBar.classList.add('hidden');
+        sidebar.classList.add('hidden');
       } else if (active === 'autotest') {
         currentView = 'autotest';
         tabAutoTest.className = base + "bg-amber-600 text-slate-950 font-bold shadow-sm";
@@ -977,7 +1225,16 @@
 
     tabBacklog.addEventListener('click', () => setActiveTab('backlog'));
     tabKanban.addEventListener('click', () => setActiveTab('kanban'));
+    tabCalendar.addEventListener('click', () => setActiveTab('calendar'));
     tabAutoTest.addEventListener('click', () => setActiveTab('autotest'));
+    document.getElementById('btn-calendar-previous').addEventListener('click', () => {
+      moisCalendrier.setMonth(moisCalendrier.getMonth() - 1);
+      renderApp();
+    });
+    document.getElementById('btn-calendar-next').addEventListener('click', () => {
+      moisCalendrier.setMonth(moisCalendrier.getMonth() + 1);
+      renderApp();
+    });
 
     // ==========================================
     // IMPORT / EXPORT / RESET / RECHARGE
@@ -1165,6 +1422,7 @@
       if (controleWip.message) alert(controleWip.message);
 
       const now = new Date().toISOString().split('T')[0];
+      const dateEcheance = document.getElementById('form-date-echeance').value || null;
       tickets.push({
         id: tickets.length ? Math.max(...tickets.map(t=>t.id))+1 : 1,
         titre, type, priorite, points, statut,
@@ -1173,7 +1431,8 @@
         description: "",
         majLe: now,
         assigne: null,
-        bloquePar: []
+        bloquePar: [],
+        dateEcheance
       });
       sauvegarder({ tickets, users, journal });
       closeModal(); renderApp();
@@ -1181,6 +1440,64 @@
     document.getElementById('btn-open-modal').addEventListener('click', openModal);
     document.getElementById('btn-close-modal-x').addEventListener('click', closeModal);
     document.getElementById('btn-cancel-modal').addEventListener('click', closeModal);
+
+    const deadlineBackdrop = document.getElementById('deadline-modal-backdrop');
+    const deadlineBox = document.getElementById('deadline-modal-box');
+
+    window.ouvrirModalEcheance = function(idTicket) {
+      const ticket = tickets.find(element => element.id === idTicket);
+      if (!ticket) {
+        showToastError(`Ticket #${idTicket} introuvable.`);
+        return;
+      }
+      ticketEcheanceId = idTicket;
+      document.getElementById('deadline-ticket-title').textContent = `#${ticket.id} — ${ticket.titre}`;
+      document.getElementById('deadline-modal-date').value =
+        estDateISOValide(ticket.dateEcheance) ? ticket.dateEcheance : '';
+      deadlineBackdrop.classList.remove('opacity-0', 'pointer-events-none');
+      deadlineBox.classList.remove('scale-95');
+      deadlineBox.classList.add('scale-100');
+    };
+
+    function fermerModalEcheance() {
+      deadlineBackdrop.classList.add('opacity-0', 'pointer-events-none');
+      deadlineBox.classList.remove('scale-100');
+      deadlineBox.classList.add('scale-95');
+      ticketEcheanceId = null;
+    }
+
+    window.modifierDateEcheance = function(idTicket, dateEcheance) {
+      const ticket = tickets.find(element => element.id === idTicket);
+      if (!ticket) {
+        showToastError(`Ticket #${idTicket} introuvable.`);
+        renderApp();
+        return;
+      }
+      if (dateEcheance !== '' && !estDateISOValide(dateEcheance)) {
+        showToastError("Date d'échéance invalide.");
+        renderApp();
+        return;
+      }
+      ticket.dateEcheance = dateEcheance || null;
+      sauvegarder({ tickets, users, journal });
+      renderApp();
+    };
+
+    document.getElementById('btn-save-deadline').addEventListener('click', () => {
+      if (ticketEcheanceId === null) return;
+      const dateEcheance = document.getElementById('deadline-modal-date').value;
+      const idTicket = ticketEcheanceId;
+      window.modifierDateEcheance(idTicket, dateEcheance);
+      fermerModalEcheance();
+    });
+    document.getElementById('btn-clear-deadline').addEventListener('click', () => {
+      if (ticketEcheanceId === null) return;
+      const idTicket = ticketEcheanceId;
+      window.modifierDateEcheance(idTicket, '');
+      fermerModalEcheance();
+    });
+    document.getElementById('btn-cancel-deadline').addEventListener('click', fermerModalEcheance);
+    document.getElementById('btn-close-deadline-x').addEventListener('click', fermerModalEcheance);
 
     // ==========================================
     // MODIFICATION DES BLOQUANTS
@@ -1331,7 +1648,6 @@
     // ==========================================
     // SIDEBAR & FILTRES
     // ==========================================
-    const sidebar = document.getElementById('sidebar-filters');
     const toggleBtn = document.getElementById('btn-toggle-sidebar');
     const toggleIcon = document.getElementById('toggle-icon');
     const toggleLabel = document.getElementById('toggle-label');
@@ -1344,12 +1660,16 @@
 
     document.getElementById('search-input').addEventListener('input', renderApp);
     document.querySelectorAll('.filter-type, .filter-priority, .filter-status').forEach(cb => cb.addEventListener('change', renderApp));
+    document.getElementById('filter-deadline-late').addEventListener('change', renderApp);
+    document.getElementById('filter-deadline-j2').addEventListener('change', renderApp);
     document.getElementById('filter-type-all').addEventListener('change', e => { document.querySelectorAll('.filter-type').forEach(cb => cb.checked = e.target.checked); renderApp(); });
     document.getElementById('filter-priority-all').addEventListener('change', e => { document.querySelectorAll('.filter-priority').forEach(cb => cb.checked = e.target.checked); renderApp(); });
     document.getElementById('filter-status-all').addEventListener('change', e => { document.querySelectorAll('.filter-status').forEach(cb => cb.checked = e.target.checked); renderApp(); });
     document.getElementById('btn-reset-filters').addEventListener('click', () => {
       document.getElementById('search-input').value = '';
       document.querySelectorAll('.filter-type, .filter-priority, .filter-status, #filter-type-all, #filter-priority-all, #filter-status-all').forEach(cb => cb.checked = true);
+      document.getElementById('filter-deadline-late').checked = false;
+      document.getElementById('filter-deadline-j2').checked = false;
       document.getElementById('filter-user-select').value = 'all';
       document.getElementById('btn-my-tickets').classList.remove('btn-filter-active');
       renderApp();

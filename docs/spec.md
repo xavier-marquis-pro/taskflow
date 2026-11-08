@@ -47,4 +47,15 @@
 - `deplacerTickets(liste, idTicket, versStatut)` → refuse `encours` si un bloquant n'est pas terminé.
 - `listerBloquants(liste, ticket)` → tableau `[{ id, titre }]` utilisé par le badge 🔒.
 - `supprimerTicketEtReferences(liste, idTicket)` → nouvelle liste sans le ticket ni ses références.
-- `migrerV4versV5(data)` + `VERSION_ACTUELLE = 5`.
+- `migrerV4versV5(data)` + `VERSION_ACTUELLE = 6`.
+
+## Fonctionnalité C — Échéances et calendrier
+
+- Chaque ticket possède `dateEcheance`, au format `AAAA-MM-JJ` ou `null`.
+- La migration V5 vers V6 ajoute `dateEcheance: null` aux tickets qui n’en possèdent pas, sans supprimer une échéance déjà présente.
+- Un ticket non terminé porte le badge « J-2 » si `dateDuJour > dateEcheance - 2 jours` et `dateDuJour <= dateEcheance`; il porte « En retard » si `dateDuJour > dateEcheance`. Les états sont exclusifs.
+- Les échéances peuvent être définies à la création, directement sur une carte ou dans le formulaire dédié, et sont conservées dans les imports JSON/CSV et exports JSON.
+- Les filtres « En retard » et « J-2 » sont décochés par défaut. Quand ils sont tous deux actifs, ils affichent leur union.
+- La vue Calendrier affiche les tickets datés du mois sélectionné, sur une grille commençant le lundi, avec navigation par mois.
+- Les entêtes Kanban indiquent le nombre de retards par statut; les tickets en retard les plus anciens sont affichés en premier dans leur colonne.
+- Dans le Kanban, la date et son badge sont regroupés avec les commandes d’échéance dans un bloc discret séparé des commandes de statut et de dépendances. Le champ natif permet la saisie clavier et l’ouverture du calendrier.

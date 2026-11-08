@@ -39,14 +39,17 @@
               </div>
             </div>
           </div>
-          <nav class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800/80">
-            <button id="tab-backlog" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all bg-blue-600 text-white shadow-sm">
+          <nav class="flex items-center whitespace-nowrap bg-slate-950 p-1 rounded-xl border border-slate-800/80">
+            <button id="tab-backlog" class="px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all bg-blue-600 text-white shadow-sm whitespace-nowrap">
               <i data-lucide="list" class="w-3.5 h-3.5"></i> Backlog
             </button>
-            <button id="tab-kanban" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all text-slate-400 hover:text-slate-200">
+            <button id="tab-kanban" class="px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
               <i data-lucide="kanban" class="w-3.5 h-3.5"></i> Kanban
             </button>
-            <button id="tab-autotest" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all text-amber-400 hover:text-amber-300">
+            <button id="tab-calendar" class="px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap">
+              <i data-lucide="calendar-days" class="w-3.5 h-3.5"></i> Calendrier
+            </button>
+            <button id="tab-autotest" class="px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all text-amber-400 hover:text-amber-300 whitespace-nowrap">
               <i data-lucide="flask-conical" class="w-3.5 h-3.5"></i> Auto-Test
             </button>
           </nav>
@@ -108,6 +111,20 @@
           <button id="btn-my-tickets" class="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 text-xs font-medium transition-colors flex items-center justify-center gap-1" title="Mes tickets">
             <i data-lucide="user" class="w-3.5 h-3.5"></i>
           </button>
+        </div>
+      </div>
+
+      <div id="deadline-filters" class="space-y-1">
+        <label class="text-[10px] font-medium text-slate-400 block">Urgences</label>
+        <div class="space-y-1 bg-slate-950/40 p-1.5 rounded-lg border border-slate-800/60">
+          <label class="flex items-center gap-2 p-1 rounded hover:bg-slate-800/50 cursor-pointer text-xs">
+            <input type="checkbox" id="filter-deadline-late" class="rounded border-slate-700 bg-slate-900 text-rose-500 focus:ring-0">
+            <span class="text-rose-300">En retard</span>
+          </label>
+          <label class="flex items-center gap-2 p-1 rounded hover:bg-slate-800/50 cursor-pointer text-xs">
+            <input type="checkbox" id="filter-deadline-j2" class="rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0">
+            <span class="text-amber-300">J-2</span>
+          </label>
         </div>
       </div>
 
@@ -258,9 +275,21 @@
         <div id="tickets-container" class="space-y-2.5"></div>
       </section>
 
-      <section id="view-kanban" class="flex-1 overflow-x-auto p-3 sm:p-4 hidden flex-col">
+      <section id="view-kanban" class="flex-1 overflow-auto p-3 sm:p-4 hidden flex-col">
         <div id="dashboard-kpi" class="mb-4 flex flex-col md:flex-row gap-3"></div>
-        <div id="kanban-board" class="grid grid-cols-1 md:grid-cols-5 gap-3 flex-1 min-w-[1000px]"></div>
+        <div id="kanban-board" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-3 flex-1"></div>
+      </section>
+
+      <section id="view-calendar" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 hidden">
+        <div class="flex items-center justify-between bg-slate-950/70 border border-slate-800 rounded-xl p-2">
+          <button type="button" id="btn-calendar-previous" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs" aria-label="Mois précédent">←</button>
+          <h2 id="calendar-month-title" class="text-sm font-bold text-slate-100 capitalize"></h2>
+          <button type="button" id="btn-calendar-next" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs" aria-label="Mois suivant">→</button>
+        </div>
+        <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-semibold text-slate-400">
+          <span>Lun.</span><span>Mar.</span><span>Mer.</span><span>Jeu.</span><span>Ven.</span><span>Sam.</span><span>Dim.</span>
+        </div>
+        <div id="calendar-grid" class="grid grid-cols-7 gap-1"></div>
       </section>
 
       <section id="view-autotest" class="flex-1 overflow-y-auto p-4 space-y-4 hidden">
@@ -452,6 +481,10 @@
             </select>
           </div>
         </div>
+        <div>
+          <label for="form-date-echeance" class="block text-[11px] font-semibold uppercase tracking-wider text-slate-300 mb-1">Date d’échéance</label>
+          <input type="date" id="form-date-echeance" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
+        </div>
         <div class="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
           <button type="button" id="btn-autofill" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 flex items-center gap-1">
             <i data-lucide="wand-2" class="w-3.5 h-3.5 text-amber-400"></i> Auto-fill
@@ -462,6 +495,29 @@
           </div>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="deadline-modal-backdrop" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-200">
+    <div id="deadline-modal-box" class="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-w-sm w-full p-5 space-y-4 transform scale-95 transition-transform duration-200">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white">Date d’échéance</h3>
+          <p id="deadline-ticket-title" class="text-xs text-slate-400 mt-1"></p>
+        </div>
+        <button type="button" id="btn-close-deadline-x" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800" aria-label="Fermer">×</button>
+      </div>
+      <label for="deadline-modal-date" class="block text-[11px] font-semibold uppercase tracking-wider text-slate-300">
+        Échéance
+        <input type="date" id="deadline-modal-date" class="mt-1 w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500">
+      </label>
+      <div class="flex items-center justify-between gap-2">
+        <button type="button" id="btn-clear-deadline" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl">Effacer</button>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btn-cancel-deadline" class="px-3 py-1.5 hover:bg-slate-800 text-slate-300 text-xs font-medium rounded-xl">Annuler</button>
+          <button type="button" id="btn-save-deadline" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl">Enregistrer</button>
+        </div>
+      </div>
     </div>
   </div>
 
