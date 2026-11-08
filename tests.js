@@ -55,19 +55,22 @@
           };
         });
 
-        executerTest('T5', "Tableau intact (R4)", () => {
+        executerTest('T5', "Tableau intact après refus de déplacement (R4)", () => {
           const liste = structuredClone(TICKETS_DEMO);
+          liste.find(t => t.id === 1).bloquePar = [9];
           const statutsInitiaux = liste.map(t => t.statut);
-          deplacerTickets(liste, 5, 'afaire');
-          deplacerTickets(liste, 9, 'backlog');
+          const refusNonEstime = deplacerTickets(liste, 5, 'afaire');
+          const refusDependanceActive = deplacerTickets(liste, 9, 'backlog');
           const resultatImport = importerJSON(JSON.stringify([{
             id: 100, titre: 'Ticket importé', type: 'story', priorite: 2, points: 3, statut: 'backlog'
           }]), liste);
           const statutsFinaux = liste.map(t => t.statut);
+          const sourceIntacte = resultatImport.ok && resultatImport.importes === 1 && liste.length === 12 &&
+            JSON.stringify(statutsFinaux) === JSON.stringify(statutsInitiaux);
           return {
-            condition: resultatImport.ok && resultatImport.importes === 1 && liste.length === 12 &&
-              JSON.stringify(statutsFinaux) === JSON.stringify(statutsInitiaux),
-            detail: `Après deux refus et un import, la source contient ${liste.length} tickets et ses statuts ${JSON.stringify(statutsFinaux) === JSON.stringify(statutsInitiaux) ? 'sont inchangés' : 'ont changé'}.`
+            condition: !refusNonEstime.ok && !refusDependanceActive.ok &&
+              refusDependanceActive.erreur.includes('#1') && sourceIntacte,
+            detail: `Refus non estimé : ${refusNonEstime.ok ? 'accepté à tort' : 'confirmé'}; refus dépendance active : ${refusDependanceActive.ok ? 'accepté à tort' : refusDependanceActive.erreur}; après import, statuts de la source ${sourceIntacte ? 'inchangés' : 'modifiés'}.`
           };
         });
 
@@ -382,6 +385,88 @@
             condition: VERSION_ACTUELLE === 5 &&
               JSON.stringify(resultat) === JSON.stringify(attendue),
             detail: `Version actuelle : ${VERSION_ACTUELLE}; données migrées : ${JSON.stringify(resultat)}.`
+          };
+        });
+
+        executerTest('T28', "Réouverture d'un ticket terminé", () => {
+          const liste = [
+            { id: 55, titre: 'Ticket terminé', statut: 'termine', points: 2, bloquePar: [] }
+          ];
+          const resultat = deplacerTickets(liste, 55, 'backlog');
+          return {
+            condition: resultat.ok && liste[0].statut === 'backlog' &&
+              journal[0]?.statutOrigine === 'termine' && journal[0]?.statutCible === 'backlog',
+            detail: `Réouverture ${resultat.ok ? 'acceptée' : `refusée : ${resultat.erreur}`}; statut : "${liste[0].statut}".`
+          };
+        });
+
+        executerTest('T29', "Ticket en cours dépendant protège son bloquant terminé", () => {
+          const liste = [
+            { id: 55, titre: 'Ticket bloquant', statut: 'termine', points: 2, bloquePar: [] },
+            { id: 22, titre: 'Ticket dépendant', statut: 'encours', points: 2, bloquePar: [55] }
+          ];
+          const resultat = deplacerTickets(liste, 55, 'backlog');
+          return {
+            condition: !resultat.ok && resultat.erreur.includes('#22') &&
+              liste.find(ticket => ticket.id === 55).statut === 'termine',
+            detail: `Déplacement ${resultat.ok ? 'accepté à tort' : `refusé : ${resultat.erreur}`}; #55 reste "${liste[0].statut}".`
+          };
+        });
+
+        executerTest('T30', "Réouverture possible après sortie du dépendant d'En cours", () => {
+          const liste = [
+            { id: 55, titre: 'Ticket bloquant', statut: 'termine', points: 2, bloquePar: [] },
+            { id: 22, titre: 'Ticket dépendant', statut: 'encours', points: 2, bloquePar: [55] }
+          ];
+          const deplacementDependante = deplacerTickets(liste, 22, 'afaire');
+          const reouverture = deplacerTickets(liste, 55, 'afaire');
+          return {
+            condition: deplacementDependante.ok && reouverture.ok &&
+              liste.find(ticket => ticket.id === 22).statut === 'afaire' &&
+              liste.find(ticket => ticket.id === 55).statut === 'afaire',
+            detail: `Dépendant déplacé : ${deplacementDependante.ok ? 'oui' : deplacementDependante.erreur}; réouverture : ${reouverture.ok ? 'acceptée' : reouverture.erreur}.`
+          };
+        });
+
+        executerTest('T31', "Réouverture respecte la limite WIP", () => {
+          const liste = [
+            { id: 55, titre: 'Ticket terminé', statut: 'termine', points: 2, bloquePar: [] },
+            { id: 1, titre: 'En cours 1', statut: 'encours', points: 2, bloquePar: [] },
+            { id: 2, titre: 'En cours 2', statut: 'encours', points: 2, bloquePar: [] },
+            { id: 3, titre: 'En cours 3', statut: 'encours', points: 2, bloquePar: [] }
+          ];
+          const resultat = deplacerTickets(liste, 55, 'encours');
+          return {
+            condition: !resultat.ok && resultat.erreur.includes('Règle R1') &&
+              liste.find(ticket => ticket.id === 55).statut === 'termine',
+            detail: `Déplacement vers En cours ${resultat.ok ? 'accepté à tort' : `refusé : ${resultat.erreur}`}; #55 reste "${liste[0].statut}".`
+          };
+        });
+
+        executerTest('T32', "Réouverture vers En cours respecte les dépendances", () => {
+          const liste = [
+            { id: 55, titre: 'Ticket terminé', statut: 'termine', points: 2, bloquePar: [6] },
+            { id: 6, titre: 'Bloquant non terminé', statut: 'afaire', points: 2, bloquePar: [] }
+          ];
+          const resultat = deplacerTickets(liste, 55, 'encours');
+          return {
+            condition: !resultat.ok && resultat.erreur === 'Bloqué par #6 (non terminés).' &&
+              liste.find(ticket => ticket.id === 55).statut === 'termine',
+            detail: `Déplacement vers En cours ${resultat.ok ? 'accepté à tort' : `refusé : ${resultat.erreur}`}; statut conservé : "${liste[0].statut}".`
+          };
+        });
+
+        executerTest('T33', "En revue ne libère pas le ticket bloquant terminé", () => {
+          const liste = [
+            { id: 55, titre: 'Ticket bloquant', statut: 'termine', points: 2, bloquePar: [] },
+            { id: 22, titre: 'Ticket dépendant', statut: 'enrevue', points: 2, bloquePar: [55] }
+          ];
+          const resultat = deplacerTickets(liste, 55, 'backlog');
+          return {
+            condition: !resultat.ok && resultat.erreur.includes('#22') &&
+              resultat.erreur.includes('À faire') && resultat.erreur.includes('Backlog') &&
+              liste.find(ticket => ticket.id === 55).statut === 'termine',
+            detail: `Réouverture ${resultat.ok ? 'acceptée à tort' : `refusée : ${resultat.erreur}`}; #55 reste "${liste[0].statut}".`
           };
         });
       } finally {

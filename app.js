@@ -240,6 +240,20 @@
       const target = COLONNES_KANBAN.find(c => c.id === versStatut);
       if (!target) return { ok: false, erreur: "Colonne destination invalide." };
 
+      if (ticket.statut === 'termine' && versStatut !== 'termine') {
+        const ticketsDependantsNonLibérés = list
+          .filter(element => element.id !== ticket.id &&
+            !['afaire', 'backlog'].includes(element.statut) &&
+            Array.isArray(element.bloquePar) && element.bloquePar.includes(ticket.id))
+          .map(element => `#${element.id}`);
+        if (ticketsDependantsNonLibérés.length > 0) {
+          return {
+            ok: false,
+            erreur: `Impossible de modifier le statut de #${ticket.id} : les tickets dépendants ${ticketsDependantsNonLibérés.join(', ')} doivent d'abord passer par « À faire » ou « Backlog ».`
+          };
+        }
+      }
+
       if (versStatut === 'encours' && Array.isArray(ticket.bloquePar)) {
         const bloquantsNonTermines = ticket.bloquePar
           .map(idBloquant => list.find(element => element.id === idBloquant))
@@ -250,10 +264,6 @@
         }
       }
 
-      if (ticket.statut === 'termine' && versStatut !== 'termine') {
-        return { ok: false, erreur: `Règle R5 : Le ticket "#${ticket.id}" est terminé (état puits).` };
-      }
-      
       if (versStatut === 'termine' && ticket.statut !== 'enrevue') {
         return { ok: false, erreur: `Règle R6 (PO) : Le ticket doit passer par "En revue" avant d'être terminé.` };
       }
@@ -719,7 +729,6 @@
 
             const prev = idx > 0 ? COLONNES_KANBAN[idx-1] : null;
             const next = idx < COLONNES_KANBAN.length-1 ? COLONNES_KANBAN[idx+1] : null;
-            const isTermine = t.statut === 'termine';
             const isDirectToTermineForbidden = (t.statut === 'encours' && next && next.id === 'termine');
             
             card.innerHTML = `
@@ -736,8 +745,8 @@
                 </div>
                 <div class="flex items-center gap-1">
                   <button type="button" onclick="openDependancesModal(${t.id})" class="p-1 rounded bg-slate-800 hover:bg-amber-900/50 text-amber-300 transition-colors" aria-label="Modifier les tickets bloquants de #${t.id}" title="Modifier les bloquants">🔒</button>
-                  <button onclick="handleMoveTicket(${t.id}, '${prev?prev.id:''}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition-colors" ${(!prev||isTermine)?'disabled':''}>&lt;</button>
-                  <button onclick="handleMoveTicket(${t.id}, '${next?next.id:''}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition-colors" ${(!next||isTermine||isDirectToTermineForbidden)?'disabled':''}>&gt;</button>
+                  <button onclick="handleMoveTicket(${t.id}, '${prev?prev.id:''}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition-colors" ${!prev?'disabled':''}>&lt;</button>
+                  <button onclick="handleMoveTicket(${t.id}, '${next?next.id:''}')" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-30 disabled:pointer-events-none transition-colors" ${(!next||isDirectToTermineForbidden)?'disabled':''}>&gt;</button>
                 </div>
               </div>`;
             cc.appendChild(card);

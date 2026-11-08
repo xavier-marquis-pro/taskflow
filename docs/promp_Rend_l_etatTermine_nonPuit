@@ -1,0 +1,7 @@
+- Nouvelle règle : l'état "Terminé" d'un ticket devient un état "non puit" : on peut le remettre à n'importe quel des autres états, à condition que d'autres règles de ne m'empechênt pas ( par exemple mettre au statut en cours alors qu'il y a déjà 3 tickets en cours ==> empêcher ça )
+- Empêcher tout modification de l'état "Terminé" d'un ticket dont un autre ticket au statut "EN COURS" dépend :
+Si T55 est terminé, qui T22 est en cours et dépend de T55, alors T55 ne peut pas changer son statut Terminé ( la seule manière serait de mettre le ticket T22 au statut "A Faire" ou "Backlog" )
+- Vérifie que cela peut être fait foncionnellement, puis techniquement.
+- En cas d'incohérence fonctionnelle, arrête toi et demande moi quoi faire.
+- En cas d'incohérence fonctionnelle, arrête toi et demande moi quoi faire.
+- Explique moi ce qui va être fait avant que valide

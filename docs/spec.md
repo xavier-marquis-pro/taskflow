@@ -38,6 +38,8 @@
 - Un ID introuvable dans `bloquePar` est ignoré (non bloquant) et retiré à la prochaine sauvegarde.
 - Le blocage « En cours » s'applique uniquement au déplacement (`deplacerTickets`).
 - Message de blocage : `Bloqué par #3, #5 (non terminés).`, affiché dans le toast d'erreur.
+- Un ticket « Terminé » peut être déplacé vers un autre statut, sous réserve des autres règles (notamment WIP et dépendances).
+- Un ticket « Terminé » ne peut pas quitter cet état tant qu'un ticket dépendant n'est pas en « À faire » ou « Backlog ». Les statuts « En cours », « En revue » et « Terminé » ne libèrent pas le ticket bloquant.
 
 ## Fonctions attendues (contrat entre Testeur-QA et Dev-JS)
 
