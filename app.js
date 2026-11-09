@@ -10,7 +10,7 @@
     ];
 
     // ==========================================
-    // STORAGE VERSIONNÉ (V6) avec échéances
+    // STORAGE VERSIONNÉ (V6) avec échéances; les sprints sont ajoutés sans changer la version métier
     // ==========================================
     const CLE = "taskflow";
     const VERSION_ACTUELLE = 6;
@@ -41,7 +41,7 @@
       { id: 10, titre: "Migration des serveurs vers AWS Cloud", type: "tache", priorite: 3, points: null, statut: "backlog", creeLe: "2026-11-03", projet: { ...defaultProject }, assigne: 7, bloquePar: [] },
       { id: 11, titre: "Ajout du choix de la langue (i18n Multi-langues)", type: "story", priorite: 3, points: 3, statut: "backlog", creeLe: "2026-10-31", projet: { ...defaultProject }, assigne: 8, bloquePar: [] },
       { id: 12, titre: "Mise en place de la suite de tests E2E Cypress", type: "tache", priorite: 1, points: 5, statut: "afaire", creeLe: "2026-10-26", projet: { ...defaultProject }, assigne: 9, bloquePar: [] }
-    ].map(ticket => ({ ...ticket, dateEcheance: null }));
+    ].map(ticket => ({ ...ticket, dateEcheance: null, sprintId: null }));
 
     function migrerV2versV3(data) {
       if (Array.isArray(data)) {
@@ -77,8 +77,22 @@
         ...data,
         ...("version" in data ? { version: 6 } : {}),
         tickets: data.tickets.map(ticket => (
-          ticket.dateEcheance === undefined ? { ...ticket, dateEcheance: null } : ticket
+          {
+            ...ticket,
+            ...(ticket.dateEcheance === undefined ? { dateEcheance: null } : {}),
+            ...(ticket.sprintId === undefined ? { sprintId: null } : {})
+          }
         ))
+      };
+    }
+
+    function completerDonneesSprints(data) {
+      return {
+        ...data,
+        tickets: (data.tickets || []).map(ticket => (
+          ticket.sprintId === undefined ? { ...ticket, sprintId: null } : ticket
+        )),
+        sprints: Array.isArray(data.sprints) ? data.sprints : []
       };
     }
 
@@ -115,7 +129,8 @@
           version: VERSION_ACTUELLE, 
           tickets: state.tickets, 
           users: state.users,
-          journal: state.journal
+          journal: state.journal,
+          sprints: state.sprints !== undefined ? state.sprints : sprints
         }));
       } catch (e) {
         console.warn("Échec de sauvegarde localStorage", e);
@@ -126,42 +141,53 @@
       try {
         const brut = localStorage.getItem(CLE);
         if (brut === null) {
-          return { tickets: TICKETS_DEMO.map(t => ({ ...t })), users: [...USERS_DEMO], journal: [] };
+          return { tickets: TICKETS_DEMO.map(t => ({ ...t, sprintId: null })), users: [...USERS_DEMO], journal: [], sprints: [] };
         }
 
         const parse = JSON.parse(brut);
         let data = { tickets: [], users: [], journal: [] };
 
         if (Array.isArray(parse)) {
-          data = { tickets: parse, users: [...USERS_DEMO], journal: [] };
+          data = { tickets: parse, users: [...USERS_DEMO], journal: [], sprints: [] };
           data = migrerJusquaVersion(data, 1);
+          data = completerDonneesSprints(data);
           sauvegarder(data);
         } else if (parse && typeof parse === "object" && "version" in parse) {
           data = parse;
           if (parse.version < VERSION_ACTUELLE) {
             data = migrerJusquaVersion(data, parse.version);
+          }
+          const avecSprints = completerDonneesSprints(data);
+          if (JSON.stringify(avecSprints) !== JSON.stringify(data) || parse.version < VERSION_ACTUELLE) {
+            data = avecSprints;
             sauvegarder(data);
+          } else {
+            data = avecSprints;
           }
         } else {
-          return { tickets: TICKETS_DEMO.map(t => ({ ...t })), users: [...USERS_DEMO], journal: [] };
+          return { tickets: TICKETS_DEMO.map(t => ({ ...t, sprintId: null })), users: [...USERS_DEMO], journal: [], sprints: [] };
         }
 
         return { 
           tickets: data.tickets || [], 
           users: data.users && data.users.length > 0 ? data.users : [...USERS_DEMO],
-          journal: data.journal || []
+          journal: data.journal || [],
+          sprints: Array.isArray(data.sprints) ? data.sprints : []
         };
 
       } catch (e) {
         console.warn("Données corrompues, fallback DEMO", e);
-        return { tickets: TICKETS_DEMO.map(t => ({ ...t })), users: [...USERS_DEMO], journal: [] };
+        return { tickets: TICKETS_DEMO.map(t => ({ ...t, sprintId: null })), users: [...USERS_DEMO], journal: [], sprints: [] };
       }
     }
 
+    let sprints = [];
     let state = charger();
     let tickets = state.tickets;
     let users = state.users;
     let journal = state.journal;
+    sprints = state.sprints || [];
+    let sprintSelectionneId = sprints.find(sprint => sprint.statut === 'actif')?.id ?? sprints[0]?.id ?? null;
 
     let currentView = 'backlog';
     let ticketIdToDelete = null;
@@ -195,6 +221,103 @@
       const mois = String(date.getMonth() + 1).padStart(2, '0');
       const jour = String(date.getDate()).padStart(2, '0');
       return `${annee}-${mois}-${jour}`;
+    }
+
+    function filtrerTicketsParSprint(liste, idSprint) {
+      if (idSprint === null || idSprint === undefined) return [];
+      return liste.filter(ticket => ticket.sprintId === idSprint);
+    }
+
+    function trierSprints(liste) {
+      return [...liste].sort((a, b) =>
+        a.dateDebut.localeCompare(b.dateDebut) || a.id - b.id
+      );
+    }
+
+    function pointsRestantsSprint(listeTickets, idSprint) {
+      return filtrerTicketsParSprint(listeTickets, idSprint)
+        .filter(ticket => ticket.statut !== 'termine')
+        .reduce((total, ticket) => total + (Number(ticket.points) || 0), 0);
+    }
+
+    function enregistrerPointBurndown(sprint, listeTickets, date = obtenirDateLocaleISO()) {
+      if (!Array.isArray(sprint.historiqueBurndown)) sprint.historiqueBurndown = [];
+      const point = { date, restant: pointsRestantsSprint(listeTickets, sprint.id) };
+      const index = sprint.historiqueBurndown.findIndex(element => element.date === date);
+      if (index >= 0) sprint.historiqueBurndown[index] = point;
+      else sprint.historiqueBurndown.push(point);
+      sprint.historiqueBurndown.sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    function validerProprietesSprint(nom, capacite, dateDebut, dateFin) {
+      if (!nom.trim()) return 'Le nom du sprint est obligatoire.';
+      if (!Number.isFinite(capacite) || capacite < 0) return 'La capacité doit être un nombre positif ou nul.';
+      if (!estDateISOValide(dateDebut) || !estDateISOValide(dateFin)) return 'Les dates de début et de fin sont obligatoires et doivent être valides.';
+      if (dateFin < dateDebut) return 'La date de fin doit être égale ou postérieure à la date de début.';
+      return null;
+    }
+
+    function creerSprint(listeSprints, nom, capacite, dateDebut, dateFin) {
+      const erreur = validerProprietesSprint(nom, capacite, dateDebut, dateFin);
+      if (erreur) return { ok: false, erreur };
+      const sprint = {
+        id: listeSprints.reduce((maximum, element) => Math.max(maximum, element.id), 0) + 1,
+        nom: nom.trim(),
+        capacite,
+        dateDebut,
+        dateFin,
+        statut: 'brouillon',
+        historiqueBurndown: []
+      };
+      listeSprints.push(sprint);
+      return { ok: true, sprint };
+    }
+
+    function modifierSprint(sprint, nom, capacite, dateDebut, dateFin) {
+      const erreur = validerProprietesSprint(nom, capacite, dateDebut, dateFin);
+      if (erreur) return { ok: false, erreur };
+      Object.assign(sprint, { nom: nom.trim(), capacite, dateDebut, dateFin });
+      return { ok: true };
+    }
+
+    function demarrerSprint(listeSprints, listeTickets, idSprint) {
+      const sprint = listeSprints.find(element => element.id === idSprint);
+      if (!sprint) return { ok: false, erreur: 'Sprint introuvable.' };
+      if (sprint.statut !== 'brouillon') return { ok: false, erreur: 'Seul un sprint brouillon peut être démarré.' };
+      if (listeSprints.some(element => element.statut === 'actif')) {
+        return { ok: false, erreur: 'Un sprint est déjà actif. Clôturez-le avant d’en démarrer un autre.' };
+      }
+      sprint.statut = 'actif';
+      sprint.demarreLe = obtenirDateLocaleISO();
+      sprint.historiqueBurndown = [];
+      enregistrerPointBurndown(sprint, listeTickets, sprint.demarreLe);
+      return { ok: true };
+    }
+
+    function cloturerSprint(listeSprints, listeTickets, idSprint) {
+      const sprint = listeSprints.find(element => element.id === idSprint);
+      if (!sprint) return { ok: false, erreur: 'Sprint introuvable.' };
+      if (sprint.statut !== 'actif') return { ok: false, erreur: 'Seul un sprint actif peut être clôturé.' };
+      listeTickets.filter(ticket => ticket.sprintId === idSprint).forEach(ticket => {
+        if (ticket.statut !== 'termine') ticket.statut = 'backlog';
+        ticket.sprintId = null;
+      });
+      sprint.statut = 'cloture';
+      sprint.clotureLe = obtenirDateLocaleISO();
+      return { ok: true };
+    }
+
+    function supprimerSprint(listeSprints, listeTickets, idSprint) {
+      if (!listeSprints.some(sprint => sprint.id === idSprint)) {
+        return { ok: false, erreur: 'Sprint introuvable.' };
+      }
+      listeTickets.filter(ticket => ticket.sprintId === idSprint).forEach(ticket => {
+        if (ticket.statut !== 'termine') ticket.statut = 'backlog';
+        ticket.sprintId = null;
+      });
+      const index = listeSprints.findIndex(sprint => sprint.id === idSprint);
+      listeSprints.splice(index, 1);
+      return { ok: true };
     }
 
     function decalerDateISO(date, nombreJours) {
@@ -385,6 +508,8 @@
 
       // Enregistrer dans le journal
       enregistrerMouvement(ticket, statutOrigine, versStatut);
+      const sprintActif = sprints.find(sprint => sprint.id === ticket.sprintId && sprint.statut === 'actif');
+      if (sprintActif) enregistrerPointBurndown(sprintActif, tickets);
 
       return { ok: true, ticketsDeplaces: [ticket] };
     }
@@ -511,7 +636,7 @@
         maxId = Math.max(maxId, finalId);
 
         const now = new Date().toISOString().split('T')[0];
-        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [], dateEcheance: dateEcheance.dateEcheance });
+        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [], dateEcheance: dateEcheance.dateEcheance, sprintId: null });
         importes++;
       }
       return { ok: true, importes, rejets, nouveauxTickets };
@@ -558,7 +683,7 @@
         maxId = Math.max(maxId, finalId);
 
         const now = new Date().toISOString().split('T')[0];
-        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [], dateEcheance: dateEcheance.dateEcheance });
+        nouveauxTickets.push({ id: finalId, titre, type: typeNorm, priorite: prio, points, statut, creeLe: now, projet: { ...defaultProject }, description: "", majLe: now, assigne: isNaN(assigne) ? null : assigne, bloquePar: [], dateEcheance: dateEcheance.dateEcheance, sprintId: null });
         importes++;
       }
       return { ok: true, importes, rejets, nouveauxTickets };
@@ -714,6 +839,203 @@
       lucide.createIcons();
     }
 
+    function affecterTicketAuSprint(idTicket, idSprint) {
+      const ticket = tickets.find(element => element.id === idTicket);
+      const sprintCible = sprints.find(element => element.id === idSprint);
+      if (!ticket) return { ok: false, erreur: 'Ticket introuvable.' };
+      if (!sprintCible || sprintCible.statut === 'cloture') {
+        return { ok: false, erreur: 'Sélectionnez un sprint non clôturé.' };
+      }
+      const sprintOrigine = sprints.find(element => element.id === ticket.sprintId);
+      ticket.sprintId = idSprint;
+      if (sprintOrigine?.statut === 'actif') enregistrerPointBurndown(sprintOrigine, tickets);
+      if (sprintCible.statut === 'actif') enregistrerPointBurndown(sprintCible, tickets);
+      sauvegarder({ tickets, users, journal });
+      return { ok: true };
+    }
+
+    function retirerTicketDuSprint(idTicket) {
+      const ticket = tickets.find(element => element.id === idTicket);
+      if (!ticket || ticket.sprintId === null || ticket.sprintId === undefined) {
+        return { ok: false, erreur: 'Le ticket n’est affecté à aucun sprint.' };
+      }
+      const sprint = sprints.find(element => element.id === ticket.sprintId);
+      ticket.sprintId = null;
+      if (sprint?.statut === 'actif') enregistrerPointBurndown(sprint, tickets);
+      sauvegarder({ tickets, users, journal });
+      return { ok: true };
+    }
+
+    function rendreCarteSprint(ticket, affecte) {
+      const carte = document.createElement('article');
+      carte.className = 'flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-950/70 border border-slate-800 text-xs';
+      carte.draggable = true;
+      carte.dataset.ticketId = String(ticket.id);
+      carte.addEventListener('dragstart', evenement => {
+        evenement.dataTransfer.setData('text/plain', String(ticket.id));
+        evenement.dataTransfer.effectAllowed = 'move';
+      });
+      const contenu = document.createElement('div');
+      contenu.className = 'min-w-0';
+      const titre = document.createElement('p');
+      titre.className = 'truncate font-semibold text-slate-200';
+      titre.textContent = `#${ticket.id} ${ticket.titre}`;
+      const details = document.createElement('p');
+      details.className = 'text-[10px] text-slate-500';
+      details.textContent = `${ticket.points === null ? 'Non estimé' : `${ticket.points} pts`} · ${ticket.statut}`;
+      contenu.append(titre, details);
+      carte.appendChild(contenu);
+      if (affecte) {
+        const bouton = document.createElement('button');
+        bouton.type = 'button';
+        bouton.className = 'shrink-0 rounded px-2 py-1 bg-slate-800 hover:bg-rose-900 text-slate-300 text-[10px]';
+        bouton.textContent = 'Retirer';
+        bouton.setAttribute('aria-label', `Retirer le ticket #${ticket.id} du sprint`);
+        bouton.addEventListener('click', () => {
+          const resultat = retirerTicketDuSprint(ticket.id);
+          if (!resultat.ok) afficherErreur(resultat.erreur);
+          renderApp();
+        });
+        carte.appendChild(bouton);
+      }
+      return carte;
+    }
+
+    function installerDepotTickets(conteneur, recevoirTicket) {
+      conteneur.addEventListener('dragover', evenement => {
+        evenement.preventDefault();
+        evenement.dataTransfer.dropEffect = 'move';
+        conteneur.classList.add('border-blue-500');
+      });
+      conteneur.addEventListener('dragleave', evenement => {
+        if (!conteneur.contains(evenement.relatedTarget)) conteneur.classList.remove('border-blue-500');
+      });
+      conteneur.addEventListener('drop', evenement => {
+        evenement.preventDefault();
+        conteneur.classList.remove('border-blue-500');
+        const idTicket = Number(evenement.dataTransfer.getData('text/plain'));
+        if (!Number.isInteger(idTicket)) return;
+        const resultat = recevoirTicket(idTicket);
+        if (!resultat.ok) afficherErreur(resultat.erreur);
+        renderApp();
+      });
+    }
+
+    function rendreBurndownSprint(sprint) {
+      const graphique = document.getElementById('sprint-burndown');
+      const note = document.getElementById('sprint-burndown-note');
+      const serieIdeale = graphique.querySelector('[data-serie="ideale"]');
+      const serieRestant = graphique.querySelector('[data-serie="restant"]');
+      if (!sprint || sprint.statut !== 'actif') {
+        serieIdeale.setAttribute('points', '');
+        serieRestant.setAttribute('points', '');
+        note.textContent = 'Démarrez un sprint pour afficher son burndown.';
+        graphique.setAttribute('aria-label', 'Burndown disponible pour un sprint actif');
+        return;
+      }
+
+      const dateEnNombre = date => {
+        const [annee, mois, jour] = date.split('-').map(Number);
+        return Date.UTC(annee, mois - 1, jour);
+      };
+      const debut = dateEnNombre(sprint.dateDebut);
+      const fin = dateEnNombre(sprint.dateFin);
+      const nombreJours = Math.max(1, Math.round((fin - debut) / 86400000));
+      const premierPoint = sprint.historiqueBurndown?.[0];
+      const totalInitial = Number(premierPoint?.restant) || 0;
+      const maximum = Math.max(totalInitial, ...((sprint.historiqueBurndown || []).map(point => Number(point.restant) || 0)), 1);
+      const xPourJour = jour => 48 + (jour / nombreJours) * 544;
+      const yPourPoints = points => 182 - (Math.max(0, points) / maximum) * 145;
+      const ideal = [
+        `${xPourJour(0)},${yPourPoints(totalInitial)}`,
+        `${xPourJour(nombreJours)},${yPourPoints(0)}`
+      ].join(' ');
+      const historique = [...(sprint.historiqueBurndown || [])]
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const pointsReels = [];
+      let dernierRestant = totalInitial;
+      for (let jour = 0; jour <= nombreJours; jour++) {
+        const date = new Date(debut + jour * 86400000).toISOString().slice(0, 10);
+        historique.filter(point => point.date <= date).forEach(point => {
+          dernierRestant = Number(point.restant) || 0;
+        });
+        pointsReels.push(`${xPourJour(jour)},${yPourPoints(dernierRestant)}`);
+      }
+      serieIdeale.setAttribute('points', ideal);
+      serieRestant.setAttribute('points', pointsReels.join(' '));
+      note.textContent = `Sprint du ${sprint.dateDebut} au ${sprint.dateFin} · ${pointsRestantsSprint(tickets, sprint.id)} pts restants`;
+      graphique.setAttribute('aria-label', `Burndown du sprint ${sprint.nom}`);
+    }
+
+    function rendreVueSprint() {
+      const liste = document.getElementById('sprint-liste');
+      const selection = document.getElementById('sprint-selection-resume');
+      const sprintsTries = trierSprints(sprints);
+      liste.innerHTML = '';
+      if (sprintsTries.length === 0) {
+        liste.innerHTML = '<p class="text-[11px] text-slate-500 py-2">Aucun sprint créé.</p>';
+      }
+      sprintsTries.forEach(sprint => {
+        const bouton = document.createElement('button');
+        bouton.type = 'button';
+        bouton.className = `w-full text-left p-2 rounded-lg border ${sprint.id === sprintSelectionneId ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800 bg-slate-950/50 hover:bg-slate-800/70'}`;
+        bouton.innerHTML = `<span class="flex items-center justify-between gap-2"><strong class="truncate text-xs text-slate-200">${echapperHTML(sprint.nom)}</strong><span class="shrink-0 text-[9px] uppercase text-slate-400">${sprint.statut}</span></span><span class="text-[10px] text-slate-500">${sprint.dateDebut} → ${sprint.dateFin} · ${sprint.capacite} pts</span>`;
+        bouton.addEventListener('click', () => {
+          sprintSelectionneId = sprint.id;
+          remplirFormulaireSprint(sprint);
+          renderApp();
+        });
+        liste.appendChild(bouton);
+      });
+
+      const sprint = sprints.find(element => element.id === sprintSelectionneId) || null;
+      const formulaire = document.getElementById('sprint-form');
+      const saisieEnCours = formulaire.contains(document.activeElement) && document.activeElement.matches('input');
+      if (!saisieEnCours) remplirFormulaireSprint(sprint);
+      const boutonEnregistrer = formulaire.querySelector('[data-sprint-action="modifier"]');
+      boutonEnregistrer.disabled = false;
+      boutonEnregistrer.textContent = sprint ? 'Enregistrer les modifications' : 'Créer le sprint';
+      formulaire.querySelector('[data-sprint-action="demarrer"]').disabled =
+        !sprint || sprint.statut !== 'brouillon' || sprints.some(element => element.statut === 'actif');
+      formulaire.querySelector('[data-sprint-action="cloturer"]').disabled =
+        !sprint || sprint.statut !== 'actif';
+      formulaire.querySelector('[data-sprint-action="supprimer"]').disabled = !sprint;
+      selection.textContent = sprint
+        ? `Statut : ${sprint.statut}. La capacité est exprimée en points; les tickets non estimés comptent pour 0 point.`
+        : 'Créez un sprint pour commencer. Capacité exprimée en points; les tickets non estimés comptent pour 0 point.';
+
+      const affectes = document.getElementById('sprint-tickets-affectes');
+      const disponibles = document.getElementById('sprint-tickets-disponibles');
+      affectes.innerHTML = '';
+      disponibles.innerHTML = '';
+
+      const ticketsAffectes = sprint ? filtrerTicketsParSprint(tickets, sprint.id) : [];
+      const ticketsDisponibles = tickets.filter(ticket => ticket.sprintId === null || ticket.sprintId === undefined);
+      if (ticketsAffectes.length === 0) {
+        affectes.innerHTML = '<p class="col-span-full text-[10px] text-slate-500 text-center py-3">Déposez ici les tickets à inclure dans ce sprint.</p>';
+      } else {
+        ticketsAffectes.forEach(ticket => affectes.appendChild(rendreCarteSprint(ticket, true)));
+      }
+      if (ticketsDisponibles.length === 0) {
+        disponibles.innerHTML = '<p class="col-span-full text-[10px] text-slate-500 text-center py-3">Tous les tickets sont affectés à un sprint.</p>';
+      } else {
+        ticketsDisponibles.forEach(ticket => disponibles.appendChild(rendreCarteSprint(ticket, false)));
+      }
+      const pointsAffectes = ticketsAffectes.reduce((total, ticket) => total + (Number(ticket.points) || 0), 0);
+      document.getElementById('sprint-capacite-utilisee').textContent = sprint
+        ? `${pointsAffectes} / ${sprint.capacite} pts · capacité non bloquante`
+        : '';
+      rendreBurndownSprint(sprint);
+    }
+
+    function remplirFormulaireSprint(sprint) {
+      const formulaire = document.getElementById('sprint-form');
+      formulaire.elements['sprint-nom'].value = sprint?.nom || '';
+      formulaire.elements['sprint-capacite'].value = sprint ? sprint.capacite : '';
+      formulaire.elements['sprint-date-debut'].value = sprint?.dateDebut || '';
+      formulaire.elements['sprint-date-fin'].value = sprint?.dateFin || '';
+    }
+
     // ==========================================
     // RENDER
     // ==========================================
@@ -766,11 +1088,18 @@
       
       const sorted = sortTickets(filtered);
 
-      updateHeaderMetrics(sorted.length);
-      document.getElementById('showing-count').textContent = `${sorted.length} / ${tickets.length} affiché(s)`;
+      let affiches = sorted;
+      if (currentView === 'kanban') {
+        const sprintActif = sprints.find(sprint => sprint.statut === 'actif');
+        affiches = sprintActif ? filtrerTicketsParSprint(sorted, sprintActif.id) : [];
+      }
+
+      updateHeaderMetrics(affiches.length);
+      document.getElementById('showing-count').textContent = `${affiches.length} / ${tickets.length} affiché(s)`;
 
       if (currentView === 'backlog') renderBacklogView(sorted);
-      else if (currentView === 'kanban') renderKanbanView(sorted);
+      else if (currentView === 'sprint') rendreVueSprint();
+      else if (currentView === 'kanban') renderKanbanView(affiches);
       lucide.createIcons();
     }
 
@@ -876,9 +1205,22 @@
 
     function renderKanbanView(list) {
       const ticketsTries = trierTicketsParUrgence(list);
-      const statistiques = calculerStatistiquesKanban(tickets);
+      const statistiques = calculerStatistiquesKanban(list);
       const { total, encours, enrevue, pointsTotal, pointsTermines, pct, nonEstimes } = statistiques;
-      const retardsParStatut = compterRetardsParStatut(tickets);
+      const retardsParStatut = compterRetardsParStatut(list);
+      const sprintActif = sprints.find(sprint => sprint.statut === 'actif');
+      const proprietesSprint = document.querySelectorAll('#kanban-sprint-actif [data-sprint-propriete]');
+      proprietesSprint.forEach(element => {
+        const propriete = element.dataset.sprintPropriete;
+        const valeurs = {
+          nom: sprintActif?.nom || 'Aucun sprint actif',
+          statut: sprintActif?.statut || '—',
+          capacite: sprintActif ? `${sprintActif.capacite} pts` : '—',
+          'date-debut': sprintActif?.dateDebut || '—',
+          'date-fin': sprintActif?.dateFin || '—'
+        };
+        element.textContent = valeurs[propriete] || '—';
+      });
 
       const db = document.getElementById('dashboard-kpi');
       db.innerHTML = `
@@ -1076,6 +1418,8 @@
       if (ticket) {
         // Annuler le déplacement en restaurant le statut d'origine
         ticket.statut = dernierMouvement.statutOrigine;
+        const sprintActif = sprints.find(sprint => sprint.id === ticket.sprintId && sprint.statut === 'actif');
+        if (sprintActif) enregistrerPointBurndown(sprintActif, tickets);
       }
       
       // Retirer le mouvement du journal
@@ -1171,11 +1515,91 @@
     // ==========================================
     // TABS & AUTOTESTS
     // ==========================================
+    const navigationOnglets = document.querySelector('nav button#tab-kanban')?.parentElement;
+    const ongletSprint = document.createElement('button');
+    ongletSprint.id = 'tab-sprint';
+    ongletSprint.type = 'button';
+    ongletSprint.className = 'px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all text-slate-400 hover:text-slate-200 whitespace-nowrap';
+    ongletSprint.innerHTML = '<i data-lucide="repeat-2" class="w-3.5 h-3.5"></i> Sprint';
+    navigationOnglets?.insertBefore(ongletSprint, document.getElementById('tab-kanban'));
+
+    const vueSprint = document.createElement('section');
+    vueSprint.id = 'view-sprint';
+    vueSprint.className = 'flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 hidden';
+    vueSprint.innerHTML = `
+      <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-3">
+        <section class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">Sprints</h2>
+            <button type="button" data-sprint-action="creer" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold">Nouveau sprint</button>
+          </div>
+          <div id="sprint-liste" class="space-y-1.5"></div>
+          <div id="sprint-selection-resume" class="text-[11px] text-slate-400"></div>
+        </section>
+        <form id="sprint-form" class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-3">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">Propriétés du sprint</h2>
+          <label class="block space-y-1 text-[10px] text-slate-400">Nom
+            <input id="sprint-nom" type="text" required maxlength="100" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-100">
+          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <label class="block space-y-1 text-[10px] text-slate-400">Capacité (points)
+              <input id="sprint-capacite" type="number" min="0" step="0.5" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-100">
+            </label>
+            <label class="block space-y-1 text-[10px] text-slate-400">Début
+              <input id="sprint-date-debut" type="date" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-100">
+            </label>
+            <label class="block space-y-1 text-[10px] text-slate-400">Fin
+              <input id="sprint-date-fin" type="date" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-100">
+            </label>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button type="submit" data-sprint-action="modifier" class="px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold">Enregistrer les modifications</button>
+            <button type="button" data-sprint-action="demarrer" class="px-2.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold">Démarrer</button>
+            <button type="button" data-sprint-action="cloturer" class="px-2.5 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-xs font-semibold">Clôturer</button>
+            <button type="button" data-sprint-action="supprimer" class="px-2.5 py-1.5 rounded-lg bg-rose-900 hover:bg-rose-800 text-rose-100 text-xs font-semibold">Supprimer</button>
+          </div>
+        </form>
+      </div>
+      <section class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">Tickets du sprint sélectionné</h2>
+          <span id="sprint-capacite-utilisee" class="text-[10px] text-slate-400"></span>
+        </div>
+        <div id="sprint-tickets-affectes" class="min-h-16 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 p-2 rounded-lg border border-dashed border-slate-700" aria-label="Déposer ici les tickets affectés au sprint"></div>
+        <h3 class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Tickets sans sprint — glisser-déposer pour affecter</h3>
+        <div id="sprint-tickets-disponibles" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 p-2 rounded-lg border border-dashed border-slate-800" aria-label="Déposer ici les tickets à retirer du sprint"></div>
+      </section>
+      <section class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <div><h2 class="text-xs font-bold uppercase tracking-wider text-slate-200">Burndown</h2><p id="sprint-burndown-note" class="text-[10px] text-slate-500"></p></div>
+          <span class="text-[10px] text-slate-400">Points restants</span>
+        </div>
+        <svg id="sprint-burndown" viewBox="0 0 640 220" role="img" aria-label="Burndown du sprint" class="w-full h-48 rounded-lg bg-slate-950/50">
+          <polyline data-serie="ideale" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5"></polyline>
+          <polyline data-serie="restant" fill="none" stroke="#38bdf8" stroke-width="3"></polyline>
+        </svg>
+        <div class="flex gap-4 text-[10px] text-slate-400"><span class="text-slate-500">- - Idéal</span><span class="text-sky-400">— Restant observé</span></div>
+      </section>`;
+    document.getElementById('view-backlog')?.after(vueSprint);
+
+    const panneauSprintKanban = document.createElement('section');
+    panneauSprintKanban.id = 'kanban-sprint-actif';
+    panneauSprintKanban.className = 'mb-3 grid grid-cols-2 md:grid-cols-5 gap-2 bg-slate-950/70 border border-slate-800 rounded-xl p-3';
+    panneauSprintKanban.innerHTML = `
+      <div class="col-span-2 md:col-span-1"><span class="block text-[9px] uppercase text-slate-500">Sprint actif</span><strong data-sprint-propriete="nom" class="text-xs text-slate-100"></strong></div>
+      <div><span class="block text-[9px] uppercase text-slate-500">État</span><strong data-sprint-propriete="statut" class="text-xs text-emerald-300"></strong></div>
+      <div><span class="block text-[9px] uppercase text-slate-500">Capacité</span><strong data-sprint-propriete="capacite" class="text-xs text-slate-200"></strong></div>
+      <div><span class="block text-[9px] uppercase text-slate-500">Début</span><strong data-sprint-propriete="date-debut" class="text-xs text-slate-200"></strong></div>
+      <div><span class="block text-[9px] uppercase text-slate-500">Fin</span><strong data-sprint-propriete="date-fin" class="text-xs text-slate-200"></strong></div>`;
+    document.getElementById('dashboard-kpi')?.before(panneauSprintKanban);
+
     const tabBacklog = document.getElementById('tab-backlog');
+    const tabSprint = document.getElementById('tab-sprint');
     const tabKanban = document.getElementById('tab-kanban');
     const tabCalendar = document.getElementById('tab-calendar');
     const tabAutoTest = document.getElementById('tab-autotest');
     const viewBacklog = document.getElementById('view-backlog');
+    const viewSprint = document.getElementById('view-sprint');
     const viewKanban = document.getElementById('view-kanban');
     const viewCalendar = document.getElementById('view-calendar');
     const viewAutoTest = document.getElementById('view-autotest');
@@ -1185,21 +1609,29 @@
     function setActiveTab(active) {
       const base = "px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap ";
       tabBacklog.className = base + "text-slate-400 hover:text-slate-200";
+      tabSprint.className = base + "text-slate-400 hover:text-slate-200";
       tabKanban.className = base + "text-slate-400 hover:text-slate-200";
       tabCalendar.className = base + "text-slate-400 hover:text-slate-200";
       tabAutoTest.className = base + "text-slate-400 hover:text-slate-300";
       viewBacklog.classList.add('hidden');
+      viewSprint.classList.add('hidden');
       viewKanban.classList.add('hidden');
       viewCalendar.classList.add('hidden');
       viewAutoTest.classList.add('hidden');
       sidebar.classList.remove('hidden');
-      toggleBtn.classList.toggle('hidden', active === 'calendar');
+      toggleBtn.classList.toggle('hidden', active === 'calendar' || active === 'sprint');
 
       if (active === 'backlog') {
         currentView = 'backlog';
         tabBacklog.className = base + "bg-blue-600 text-white shadow-sm";
         viewBacklog.classList.remove('hidden');
         sortBar.classList.remove('hidden');
+      } else if (active === 'sprint') {
+        currentView = 'sprint';
+        tabSprint.className = base + "bg-blue-600 text-white shadow-sm";
+        viewSprint.classList.remove('hidden');
+        sortBar.classList.add('hidden');
+        sidebar.classList.add('hidden');
       } else if (active === 'kanban') {
         currentView = 'kanban';
         tabKanban.className = base + "bg-blue-600 text-white shadow-sm";
@@ -1224,9 +1656,80 @@
     }
 
     tabBacklog.addEventListener('click', () => setActiveTab('backlog'));
+    tabSprint.addEventListener('click', () => setActiveTab('sprint'));
     tabKanban.addEventListener('click', () => setActiveTab('kanban'));
     tabCalendar.addEventListener('click', () => setActiveTab('calendar'));
     tabAutoTest.addEventListener('click', () => setActiveTab('autotest'));
+
+    const formulaireSprint = document.getElementById('sprint-form');
+    installerDepotTickets(document.getElementById('sprint-tickets-affectes'), idTicket => {
+      if (sprintSelectionneId === null) return { ok: false, erreur: 'Créez ou sélectionnez d’abord un sprint.' };
+      return affecterTicketAuSprint(idTicket, sprintSelectionneId);
+    });
+    installerDepotTickets(document.getElementById('sprint-tickets-disponibles'), retirerTicketDuSprint);
+    const lireProprietesSprint = () => ({
+      nom: formulaireSprint.querySelector('#sprint-nom').value,
+      capacite: Number(formulaireSprint.querySelector('#sprint-capacite').value),
+      dateDebut: formulaireSprint.querySelector('#sprint-date-debut').value,
+      dateFin: formulaireSprint.querySelector('#sprint-date-fin').value
+    });
+
+    formulaireSprint.addEventListener('submit', evenement => {
+      evenement.preventDefault();
+      const proprietes = lireProprietesSprint();
+      const sprint = sprints.find(element => element.id === sprintSelectionneId);
+      if (sprint) {
+        const resultat = modifierSprint(sprint, proprietes.nom, proprietes.capacite, proprietes.dateDebut, proprietes.dateFin);
+        if (!resultat.ok) {
+          afficherErreur(resultat.erreur);
+          return;
+        }
+      } else {
+        const resultat = creerSprint(sprints, proprietes.nom, proprietes.capacite, proprietes.dateDebut, proprietes.dateFin);
+        if (!resultat.ok) {
+          afficherErreur(resultat.erreur);
+          return;
+        }
+        sprintSelectionneId = resultat.sprint.id;
+      }
+      sauvegarder({ tickets, users, journal });
+      renderApp();
+    });
+
+    document.querySelector('#view-sprint [data-sprint-action="creer"]').addEventListener('click', () => {
+      sprintSelectionneId = null;
+      remplirFormulaireSprint(null);
+      renderApp();
+      formulaireSprint.querySelector('#sprint-nom').focus();
+    });
+
+    formulaireSprint.querySelector('[data-sprint-action="demarrer"]').addEventListener('click', () => {
+      const resultat = demarrerSprint(sprints, tickets, sprintSelectionneId);
+      if (!resultat.ok) afficherErreur(resultat.erreur);
+      else {
+        sauvegarder({ tickets, users, journal });
+        renderApp();
+      }
+    });
+    formulaireSprint.querySelector('[data-sprint-action="cloturer"]').addEventListener('click', () => {
+      const resultat = cloturerSprint(sprints, tickets, sprintSelectionneId);
+      if (!resultat.ok) afficherErreur(resultat.erreur);
+      else {
+        sauvegarder({ tickets, users, journal });
+        renderApp();
+      }
+    });
+    formulaireSprint.querySelector('[data-sprint-action="supprimer"]').addEventListener('click', () => {
+      if (!window.confirm('Supprimer ce sprint? Ses tickets non terminés retourneront au Backlog.')) return;
+      const resultat = supprimerSprint(sprints, tickets, sprintSelectionneId);
+      if (!resultat.ok) afficherErreur(resultat.erreur);
+      else {
+        sprintSelectionneId = sprints.find(sprint => sprint.statut === 'actif')?.id ?? sprints[0]?.id ?? null;
+        sauvegarder({ tickets, users, journal });
+        renderApp();
+      }
+    });
+
     document.getElementById('btn-calendar-previous').addEventListener('click', () => {
       moisCalendrier.setMonth(moisCalendrier.getMonth() - 1);
       renderApp();
@@ -1244,6 +1747,8 @@
       tickets = state.tickets;
       users = state.users;
       journal = state.journal;
+      sprints = state.sprints || [];
+      sprintSelectionneId = sprints.find(sprint => sprint.statut === 'actif')?.id ?? sprints[0]?.id ?? null;
       renderApp();
       alert("Données rechargées depuis le localStorage !");
     });
@@ -1325,7 +1830,7 @@
 
     window.downloadJSON = function() {
       try {
-        const dataStr = JSON.stringify({ version: VERSION_ACTUELLE, tickets, users, journal }, null, 2);
+        const dataStr = JSON.stringify({ version: VERSION_ACTUELLE, tickets, users, journal, sprints }, null, 2);
         const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
         const link = document.createElement('a');
         link.setAttribute('href', dataUri);
@@ -1350,6 +1855,8 @@
       tickets = TICKETS_DEMO.map(t => ({ ...t }));
       users = [...USERS_DEMO];
       journal = [];
+      sprints = [];
+      sprintSelectionneId = null;
       sauvegarder({ tickets, users, journal });
       closeResetModal();
       renderApp();
@@ -1432,7 +1939,8 @@
         majLe: now,
         assigne: null,
         bloquePar: [],
-        dateEcheance
+        dateEcheance,
+        sprintId: null
       });
       sauvegarder({ tickets, users, journal });
       closeModal(); renderApp();

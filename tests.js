@@ -475,18 +475,21 @@
             version: 5,
             tickets: [
               { id: 1, titre: 'Sans échéance', statut: 'backlog' },
-              { id: 2, titre: 'Échéance conservée', statut: 'afaire', dateEcheance: '2026-11-30' }
+              { id: 2, titre: 'Échéance et sprint conservés', statut: 'afaire', dateEcheance: '2026-11-30', sprintId: 7 }
             ],
             users: [{ id: 1, prenom: 'Alice', nom: 'Martin' }],
-            journal: [{ ticketId: 1, statutOrigine: 'backlog', statutCible: 'afaire' }]
+            journal: [{ ticketId: 1, statutOrigine: 'backlog', statutCible: 'afaire' }],
+            sprints: [{ id: 7, nom: 'Sprint historique', statut: 'brouillon' }]
           };
           const resultat = migrerV5versV6(sauvegardeV5);
           return {
             condition: resultat.version === 6 && resultat.tickets[0].dateEcheance === null &&
-              resultat.tickets[1].dateEcheance === '2026-11-30' &&
+              resultat.tickets[0].sprintId === null &&
+              resultat.tickets[1].dateEcheance === '2026-11-30' && resultat.tickets[1].sprintId === 7 &&
               JSON.stringify(resultat.users) === JSON.stringify(sauvegardeV5.users) &&
-              JSON.stringify(resultat.journal) === JSON.stringify(sauvegardeV5.journal),
-            detail: `Version ${resultat.version}; échéances : ${resultat.tickets.map(ticket => ticket.dateEcheance).join(', ')}.`
+              JSON.stringify(resultat.journal) === JSON.stringify(sauvegardeV5.journal) &&
+              JSON.stringify(resultat.sprints) === JSON.stringify(sauvegardeV5.sprints),
+            detail: `Version ${resultat.version}; champs migrés : dateEcheance=${resultat.tickets[0].dateEcheance}, sprintId=${resultat.tickets[0].sprintId}; valeurs existantes conservées : dateEcheance=${resultat.tickets[1].dateEcheance}, sprintId=${resultat.tickets[1].sprintId}.`
           };
         });
 
@@ -608,6 +611,198 @@
               section.includes('border-t border-slate-800/70'),
             detail: `Date lisible, badge, saisie date native et séparation des contrôles ${section.includes('type="date"') && section.includes('calendar-days') ? 'présents' : 'absents'}.`
           };
+        });
+
+        executerTest('T43', "Onglet Sprint placé entre Backlog et Kanban", () => {
+          const onglets = [...document.querySelectorAll('nav button')];
+          const indexBacklog = onglets.findIndex(onglet => onglet.id === 'tab-backlog');
+          const indexSprint = onglets.findIndex(onglet => onglet.id === 'tab-sprint');
+          const indexKanban = onglets.findIndex(onglet => onglet.id === 'tab-kanban');
+          return {
+            condition: indexBacklog >= 0 && indexSprint === indexBacklog + 1 &&
+              indexKanban === indexSprint + 1 && document.getElementById('view-sprint') !== null,
+            detail: `Positions Backlog/Sprint/Kanban : ${indexBacklog}/${indexSprint}/${indexKanban}; vue Sprint ${document.getElementById('view-sprint') ? 'présente' : 'absente'}.`
+          };
+        });
+
+        executerTest('T44', "Formulaire Sprint expose les propriétés demandées", () => {
+          const formulaire = document.getElementById('sprint-form');
+          const champs = {
+            nom: formulaire?.querySelector('#sprint-nom'),
+            capacite: formulaire?.querySelector('#sprint-capacite'),
+            dateDebut: formulaire?.querySelector('#sprint-date-debut'),
+            dateFin: formulaire?.querySelector('#sprint-date-fin')
+          };
+          return {
+            condition: Object.values(champs).every(champ => champ !== null && champ !== undefined) &&
+              champs.nom.type === 'text' && champs.capacite.type === 'number' &&
+              champs.dateDebut.type === 'date' && champs.dateFin.type === 'date',
+            detail: `Champs présents : ${Object.entries(champs).filter(([, champ]) => champ).map(([nom]) => nom).join(', ') || 'aucun'}.`
+          };
+        });
+
+        executerTest('T45', "Vue Sprint propose liste et actions de cycle de vie", () => {
+          const vue = document.getElementById('view-sprint');
+          const liste = vue?.querySelector('#sprint-liste');
+          const actions = ['creer', 'modifier', 'demarrer', 'cloturer', 'supprimer'];
+          const actionsAbsentes = actions.filter(action =>
+            !vue?.querySelector(`[data-sprint-action="${action}"]`)
+          );
+          return {
+            condition: Boolean(liste) && actionsAbsentes.length === 0,
+            detail: `Liste ${liste ? 'présente' : 'absente'}; actions absentes : ${actionsAbsentes.join(', ') || 'aucune'}.`
+          };
+        });
+
+        executerTest('T46', "Burndown actif rendu en SVG avec restant et idéal", () => {
+          const svg = document.querySelector('#sprint-burndown');
+          const serieRestant = svg?.querySelector('[data-serie="restant"]');
+          const serieIdeale = svg?.querySelector('[data-serie="ideale"]');
+          return {
+            condition: svg?.namespaceURI === 'http://www.w3.org/2000/svg' &&
+              Boolean(serieRestant) && Boolean(serieIdeale),
+            detail: `SVG ${svg ? 'présent' : 'absent'}; série restant ${serieRestant ? 'présente' : 'absente'}, série idéale ${serieIdeale ? 'présente' : 'absente'}.`
+          };
+        });
+
+        executerTest('T47', "Kanban expose les propriétés du sprint actif", () => {
+          const panneau = document.querySelector('#kanban-sprint-actif');
+          return {
+            condition: Boolean(panneau) &&
+              ['nom', 'capacite', 'date-debut', 'date-fin'].every(propriete =>
+                panneau.querySelector(`[data-sprint-propriete="${propriete}"]`)
+              ),
+            detail: panneau ? 'Panneau présent; vérification des quatre propriétés du sprint actif.' : 'Panneau du sprint actif absent.'
+          };
+        });
+
+        executerTest('T48', "Filtrage Kanban isole les tickets du sprint actif", () => {
+          const liste = [
+            { id: 101, sprintId: 'sprint-a', statut: 'backlog' },
+            { id: 102, sprintId: 'sprint-b', statut: 'encours' },
+            { id: 103, sprintId: 'sprint-a', statut: 'termine' }
+          ];
+          const resultat = filtrerTicketsParSprint(liste, 'sprint-a');
+          return {
+            condition: resultat.map(ticket => ticket.id).join(',') === '101,103' &&
+              liste.length === 3,
+            detail: `Tickets du sprint actif retournés : ${resultat.map(ticket => `#${ticket.id}`).join(', ') || 'aucun'}; source intacte : ${liste.length === 3 ? 'oui' : 'non'}.`
+          };
+        });
+
+        executerTest('T49', "Création Sprint valide et refus des propriétés invalides", () => {
+          const liste = [{ id: 4, nom: 'Sprint existant', capacite: 10, dateDebut: '2026-11-01', dateFin: '2026-11-14', statut: 'brouillon' }];
+          const invalide = creerSprint(liste, '   ', -1, '2026-11-15', '2026-11-14');
+          const valide = creerSprint(liste, '  Sprint test  ', 12, '2026-11-15', '2026-11-28');
+          return {
+            condition: !invalide.ok && invalide.erreur && valide.ok &&
+              valide.sprint.id === 5 && valide.sprint.nom === 'Sprint test' &&
+              valide.sprint.capacite === 12 && valide.sprint.statut === 'brouillon' &&
+              liste.length === 2,
+            detail: `Entrée invalide refusée : ${!invalide.ok}; création valable : ${valide.ok ? `#${valide.sprint.id} ${valide.sprint.nom}` : valide.erreur}.`
+          };
+        });
+
+        executerTest('T50', "Modification des propriétés conserve le sprint si les dates sont invalides", () => {
+          const sprint = { id: 8, nom: 'Sprint initial', capacite: 10, dateDebut: '2026-11-01', dateFin: '2026-11-14', statut: 'brouillon' };
+          const avant = structuredClone(sprint);
+          const invalide = modifierSprint(sprint, 'Sprint changé', 15, '2026-11-20', '2026-11-19');
+          const intact = JSON.stringify(sprint) === JSON.stringify(avant);
+          const valide = modifierSprint(sprint, 'Sprint ajusté', 15, '2026-11-02', '2026-11-15');
+          return {
+            condition: !invalide.ok && intact && valide.ok &&
+              sprint.nom === 'Sprint ajusté' && sprint.capacite === 15 &&
+              sprint.dateDebut === '2026-11-02' && sprint.dateFin === '2026-11-15',
+            detail: `Modification invalide refusée sans mutation : ${!invalide.ok && intact}; modification valide appliquée : ${valide.ok}.`
+          };
+        });
+
+        executerTest('T51', "Démarrage d'un sprint inconnu est refusé sans mutation", () => {
+          const sprintsTest = [
+            { id: 1, nom: 'Sprint brouillon', statut: 'brouillon' }
+          ];
+          const avant = structuredClone(sprintsTest);
+          const resultat = demarrerSprint(sprintsTest, [], 999);
+          return {
+            condition: !resultat.ok && JSON.stringify(sprintsTest) === JSON.stringify(avant),
+            detail: `Démarrage refusé : ${!resultat.ok}; liste inchangée : ${JSON.stringify(sprintsTest) === JSON.stringify(avant)}.`
+          };
+        });
+
+        executerTest('T52', "Démarrage initialise un sprint actif et son restant", () => {
+          const sprintsTest = [
+            { id: 1, nom: 'Sprint test', capacite: 20, dateDebut: '2026-11-01', dateFin: '2026-11-14', statut: 'brouillon' }
+          ];
+          const ticketsTest = [
+            { id: 1, sprintId: 1, statut: 'afaire', points: 5 },
+            { id: 2, sprintId: 1, statut: 'termine', points: 3 },
+            { id: 3, sprintId: 2, statut: 'backlog', points: 8 }
+          ];
+          const resultat = demarrerSprint(sprintsTest, ticketsTest, 1);
+          const pointInitial = sprintsTest[0].historiqueBurndown?.[0];
+          return {
+            condition: resultat.ok && sprintsTest[0].statut === 'actif' &&
+              pointInitial?.date === sprintsTest[0].demarreLe &&
+              Number.isFinite(pointInitial?.restant),
+            detail: `Démarrage accepté : ${resultat.ok}; sprint actif : ${sprintsTest[0].statut}; relevé initial : ${JSON.stringify(pointInitial)}.`
+          };
+        });
+
+        executerTest('T53', "Clôture et suppression traitent le sprint sélectionné", () => {
+          const sprintsTest = [{ id: 9, nom: 'Sprint à clôturer', statut: 'actif' }];
+          const ticketsTest = [
+            { id: 1, sprintId: 9, statut: 'encours', points: 3 },
+            { id: 2, sprintId: 9, statut: 'termine', points: 5 },
+            { id: 3, sprintId: 8, statut: 'afaire', points: 2 }
+          ];
+          const cloture = cloturerSprint(sprintsTest, ticketsTest, 9);
+          const sprintsASupprimer = [{ id: 10, nom: 'Sprint à supprimer', statut: 'brouillon' }];
+          const suppression = supprimerSprint(sprintsASupprimer, [], 10);
+          return {
+            condition: cloture.ok && sprintsTest[0].statut === 'cloture' &&
+              ticketsTest[0].statut === 'backlog' && ticketsTest[1].statut === 'termine' &&
+              ticketsTest[2].statut === 'afaire' && suppression.ok && sprintsASupprimer.length === 0,
+            detail: `Clôture : ${cloture.ok}; ticket ouvert → ${ticketsTest[0].statut}; ticket terminé inchangé : ${ticketsTest[1].statut}; suppression : ${suppression.ok && sprintsASupprimer.length === 0}.`
+          };
+        });
+
+        executerTest('T54', "Burndown SVG trace les séries restante et idéale", () => {
+          const graphique = document.getElementById('sprint-burndown');
+          const serieRestant = graphique?.querySelector('[data-serie="restant"]');
+          const serieIdeale = graphique?.querySelector('[data-serie="ideale"]');
+          const ancienEtat = {
+            restant: serieRestant?.getAttribute('points'),
+            ideal: serieIdeale?.getAttribute('points'),
+            note: document.getElementById('sprint-burndown-note')?.textContent,
+            aria: graphique?.getAttribute('aria-label')
+          };
+          try {
+            rendreBurndownSprint({
+              id: Number.MAX_SAFE_INTEGER,
+              nom: 'Sprint isolé',
+              statut: 'actif',
+              dateDebut: '2026-11-01',
+              dateFin: '2026-11-03',
+              historiqueBurndown: [
+                { date: '2026-11-01', restant: 10 },
+                { date: '2026-11-02', restant: 5 }
+              ]
+            });
+            const pointsRestants = serieRestant?.getAttribute('points') || '';
+            const pointsIdeaux = serieIdeale?.getAttribute('points') || '';
+            return {
+              condition: pointsRestants.split(' ').length === 3 &&
+                pointsIdeaux.split(' ').length === 2 &&
+                pointsRestants !== pointsIdeaux &&
+                graphique.getAttribute('aria-label').includes('Sprint isolé'),
+              detail: `Série restante : ${pointsRestants || 'vide'}; série idéale : ${pointsIdeaux || 'vide'}.`
+            };
+          } finally {
+            if (serieRestant) serieRestant.setAttribute('points', ancienEtat.restant || '');
+            if (serieIdeale) serieIdeale.setAttribute('points', ancienEtat.ideal || '');
+            document.getElementById('sprint-burndown-note').textContent = ancienEtat.note || '';
+            graphique?.setAttribute('aria-label', ancienEtat.aria || '');
+          }
         });
       } finally {
         journal = journalSauvegarde;

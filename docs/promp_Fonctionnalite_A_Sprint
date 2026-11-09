@@ -1,0 +1,23 @@
+# Fonctionnalité A: 
+
+Créer un nouvel onglet Spring Entre Backlog et Kanban
+
+Permettra de gérer les sprints : 
+ * Créer un sprint avec ses propriétés : nom, capacité, dateDebut, dateFin
+ 
+ * Sélectionner un sprint, puis pouvoir faire les actions suivantes dessus : 
+    - modifier ses propriétés : nom, capacité, dateDebut, dateFin
+    - y glisser ou retirer des tickets
+    - démarrer le sprint
+    - cloturer --> tous les tickets non fermé et dépendant du sprint repassent dans le backlog
+    - si le sprint est démarré/actif, visualiser le Burndown en SVG : restant vs ligne idéale
+
+  * Visualiser tous les sprints, dans l'ordre
+  
+  * Supprimer un sprint existant
+   --> tous les tickets non fermé et dépendant du sprint repassent dans 
+
+  * Dans la vue Kanban, voir les propriétés du sprint en cours
+     La vue Kanban n'affichera que les ticket du sprint en cours
+
+ Rajouter des tests pour ce nouvel onglet, et cette nouvelle notion de sprint

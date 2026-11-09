@@ -23,6 +23,7 @@
 7. **Migration de la version 4 à la version 5** — La migration conserve les données existantes et ajoute `bloquePar: []` à chaque ancien ticket dépourvu de ce champ.  
    *Exemple :* ticket version 4 avec `id`, `titre` et `statut`, sans `bloquePar` → mêmes valeurs après migration, plus `bloquePar: []`; utilisateurs et journal inchangés.
 
+
 ## Questions ouvertes
 
 - Où et comment l’utilisateur gère-t-il les dépendances : formulaire de ticket, carte, modal ou autre ?
@@ -59,3 +60,23 @@
 - La vue Calendrier affiche les tickets datés du mois sélectionné, sur une grille commençant le lundi, avec navigation par mois.
 - Les entêtes Kanban indiquent le nombre de retards par statut; les tickets en retard les plus anciens sont affichés en premier dans leur colonne.
 - Dans le Kanban, la date et son badge sont regroupés avec les commandes d’échéance dans un bloc discret séparé des commandes de statut et de dépendances. Le champ natif permet la saisie clavier et l’ouverture du calendrier.
+
+## Fonctionnalité A — Sprints
+
+### Critères d’acceptation
+
+- Ajouter un onglet « Sprint » entre Backlog et Kanban.
+- Créer, sélectionner, modifier et supprimer des sprints (nom, capacité, dates de début et de fin); afficher la liste dans un ordre défini.
+- Ajouter ou retirer des tickets par glisser-déposer; démarrer et clôturer un sprint. À la clôture, ses tickets non terminés retournent au Backlog.
+- Pendant un sprint actif, afficher un burndown SVG (restant et ligne idéale).
+- Le Kanban affiche les propriétés du sprint actif et uniquement ses tickets.
+- Ajouter des auto-tests couvrant ces comportements.
+- **Migration et compatibilité** — La migration V5→V6 conserve les données et ajoute `dateEcheance: null` aux anciens tickets qui n’ont pas ce champ. À l’initialisation, les tickets sans affectation reçoivent `sprintId: null`; lorsqu’ils sont affectés, `sprintId` contient l’identifiant numérique du sprint.
+
+### Décisions à confirmer
+
+- À la suppression, où vont les tickets non terminés? Que devient l’affectation des tickets terminés?
+- La capacité est-elle exprimée en points? Comment gérer les tickets non estimés et les dépassements?
+- Le burndown mesure-t-il les points ou le nombre de tickets, et comment conserver l’historique du restant?
+- Peut-il y avoir plusieurs sprints actifs? Quel est l’ordre de la liste?
+- Un ticket peut-il appartenir à plusieurs sprints? Les propriétés d’un sprint actif restent-elles modifiables?
